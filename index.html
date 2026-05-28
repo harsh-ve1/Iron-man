@@ -62,7 +62,55 @@
         .theme-border { border-color: var(--hud-glow); }
         .scan-active-state .output_canvas,
         .scan-active-state .overlay_canvas {
-            filter: contrast(1.25) brightness(1.05) saturate(1.2);
+            filter: contrast(1.1) brightness(1.3) saturate(1.08);
+        }
+
+        .scan-wash {
+            position: absolute;
+            inset: 0;
+            z-index: 12;
+            pointer-events: none;
+            opacity: 0;
+            background:
+                radial-gradient(circle at center, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.72) 28%, rgba(255,255,255,0.30) 56%, rgba(0,0,0,0) 82%);
+            mix-blend-mode: screen;
+            transition: opacity 260ms ease;
+        }
+        .scan-active-state .scan-wash {
+            opacity: 0.68;
+            animation: scan-wash-pulse 1.3s ease-in-out infinite;
+        }
+        @keyframes scan-wash-pulse {
+            0%, 100% { transform: scale(1); filter: brightness(1); }
+            50% { transform: scale(1.02); filter: brightness(1.14); }
+        }
+
+        .scan-corners {
+            position: absolute;
+            inset: 8%;
+            z-index: 13;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 260ms ease;
+        }
+        .scan-active-state .scan-corners { opacity: 1; }
+        .scan-corners::before,
+        .scan-corners::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            border: 2px solid rgba(255,255,255,0.18);
+            border-radius: 26px;
+            clip-path: polygon(0 0, 14% 0, 14% 3%, 3% 3%, 3% 14%, 0 14%, 0 0);
+        }
+        .scan-corners::after {
+            border-color: rgba(0,255,255,0.18);
+            filter: blur(1px);
+            animation: scan-corner-glow 1.8s ease-in-out infinite;
+        }
+        @keyframes scan-corner-glow {
+            0%, 100% { opacity: 0.55; transform: scale(1); }
+            50% { opacity: 1; transform: scale(1.01); }
         }
     </style>
 </head>
@@ -76,6 +124,8 @@
     <div class="grid-bg"></div>
     <div id="flash" class="flash-overlay"></div>
     <div id="scan-line" class="scan-line"></div>
+    <div id="scan-wash" class="scan-wash"></div>
+    <div id="scan-corners" class="scan-corners"></div>
     <div id="fx-layer" class="fixed inset-0 pointer-events-none z-[55]"></div>
     
     <div id="center-reticle" class="reticle">
@@ -117,7 +167,7 @@
                 </div>
                 <div class="border-t border-cyan-900/50 pt-2.5 mt-0.5">
                     <div id="user-speech-text" class="text-[10px] text-cyan-500 font-mono tracking-wider truncate uppercase">
-                        > Systems initialized. Awaiting feedback... Use the TRACK SCAN button or say "track scan".
+                        > Systems initialized. Awaiting feedback... Use the TRACK SCAN button to scan or stop scanning.
                     </div>
                 </div>
             </div>
@@ -143,7 +193,7 @@
                     <div class="mt-2 text-cyan-500 font-mono text-[10px]">
                         <span class="text-white">> "Run health scan" / "Check biometrics"</span><br>
                         <span class="text-white">> "Unibeam" / "Blast them"</span><br>
-                        <span class="text-white">> "How are you Friday" / "Status report" / "Reload missiles" / "Track scan" / "Analyze this"</span>
+                        <span class="text-white">> "How are you Friday" / "Status report" / "Reload missiles" / "Track Scan" / "Analyze this"</span>
                     </div>
                 </div>
                 <button id="track-scan-btn" class="pointer-events-auto self-start px-5 py-3 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-200 text-xs font-black tracking-[0.35em] uppercase shadow-[0_0_20px_rgba(0,255,255,0.15)] hover:bg-cyan-400/20 hover:shadow-[0_0_30px_rgba(0,255,255,0.3)] transition-all duration-200 active:scale-[0.98]">
@@ -193,7 +243,6 @@
         let visionBusy = false;
         let armedOnce = false;
         let scanModeActive = false;
-        let scanLockUntil = 0;
 
         function addLog(msg) {
             const feed = document.getElementById('log-feed');
@@ -258,45 +307,64 @@
         }
 
         function isScanLocked() {
-            return scanModeActive || Date.now() < scanLockUntil;
+            return scanModeActive;
         }
 
         function setScanLocked(locked) {
             scanModeActive = locked;
-            scanLockUntil = locked ? Date.now() + 9000 : 0;
             document.body.classList.toggle('scan-active-state', locked);
+
             const button = document.getElementById('track-scan-btn');
             if (button) {
-                button.disabled = locked;
-                button.textContent = locked ? 'SCANNING...' : 'TRACK SCAN';
-                button.style.opacity = locked ? '0.65' : '1';
-                button.style.cursor = locked ? 'not-allowed' : 'pointer';
+                button.disabled = false;
+                button.textContent = locked ? 'STOP SCAN' : 'TRACK SCAN';
+                button.style.opacity = '1';
+                button.style.cursor = 'pointer';
+                button.classList.toggle('ring-2', locked);
+                button.classList.toggle('ring-cyan-300/50', locked);
             }
+
             if (locked) {
                 document.getElementById('sync-status').innerText = "// TRACK SCAN ACTIVE // HOLD OBJECT STEADY";
+                const feed = document.getElementById('log-feed');
+                if (feed) {
+                    const hint = document.createElement('div');
+                    hint.innerText = `[${new Date().toLocaleTimeString().split(' ')[0]}] Track scan engaged. Combat systems locked.`;
+                    feed.appendChild(hint);
+                    if (feed.children.length > 7) feed.removeChild(feed.children[0]);
+                }
             } else {
                 document.getElementById('sync-status').innerText = isSuitedUp
                     ? "// NEURAL LINK ESTABLISHED // READY FOR COMMANDS"
                     : "// SYSTEM ONLINE // AWAITING NEURAL LINK";
+                document.getElementById('scan-line').classList.remove('scan-active');
             }
         }
 
         function playScanSweep() {
             const line = document.getElementById('scan-line');
             line.classList.add('scan-active');
-            setTimeout(() => line.classList.remove('scan-active'), 2500);
+            setTimeout(() => line.classList.remove('scan-active'), 2600);
 
             const rect = overlayCanvas.getBoundingClientRect();
             const x = rect.left + rect.width / 2;
             const y = rect.top + rect.height / 2;
-            spawnParticles(x, y, 16, ['#ffffff', '#00ffff', '#7dd3fc']);
+            spawnParticles(x, y, 20, ['#ffffff', '#00ffff', '#7dd3fc']);
             spawnRipple(x, y, '#00ffff');
             triggerFxLabel('TRACK SCAN', '#00ffff');
             flashCenterPulse('#ffffff');
         }
 
         async function runTrackScan() {
-            if (visionBusy || isScanLocked()) return;
+            if (visionBusy) return;
+
+            if (scanModeActive) {
+                setScanLocked(false);
+                triggerFxLabel('SCAN OFF', '#00ffff');
+                fridaySpeak("Track scan disabled.", true);
+                return;
+            }
+
             setScanLocked(true);
             playScanSweep();
 
@@ -304,8 +372,9 @@
                 fridaySpeak("Track scan engaged. Hold the object steady in bright light.", true);
                 const result = await analyzeSceneWithGemini("Track scan and identify the visible object in this frame.");
                 fridaySpeak(result || "I could not identify the object clearly.", true);
-            } finally {
-                setTimeout(() => setScanLocked(false), 700);
+            } catch (error) {
+                console.error(error);
+                fridaySpeak("The scan was interrupted.", true);
             }
         }
 
@@ -709,8 +778,9 @@ User request: ${userText}
             const command = normalizeCommand(cmd);
             if (!command) return;
 
-            if (isScanLocked()) {
+            if (isScanLocked() && !containsAny(command, ['track scan', 'stop scan', 'scan off', 'disable scan'])) {
                 triggerFxLabel("SCAN LOCKED", "#00ffff");
+                fridaySpeak("Scanning is active. Use the button to stop it.", true);
                 return;
             }
 
@@ -735,7 +805,11 @@ User request: ${userText}
                 'look around', 'scan surroundings', 'scan the room', 'inspect object',
                 'describe this', 'recognize object', 'object analysis', 'vision scan'
             ])) {
-                await runTrackScan();
+                if (!scanModeActive) {
+                    await runTrackScan();
+                } else {
+                    fridaySpeak("Track scan is already active. Use the button to stop scanning.", true);
+                }
                 return;
             }
 
@@ -1128,20 +1202,35 @@ User request: ${userText}
                     document.getElementById('sync-status').innerText = `// ${scanHint}`;
                     const cx = w / 2;
                     const cy = h / 2;
+
                     overlayCtx.save();
-                    overlayCtx.strokeStyle = 'rgba(0,255,255,0.95)';
+                    overlayCtx.fillStyle = 'rgba(255,255,255,0.12)';
+                    overlayCtx.fillRect(0, 0, w, h);
+                    overlayCtx.strokeStyle = 'rgba(255,255,255,0.92)';
                     overlayCtx.lineWidth = 2;
-                    overlayCtx.shadowBlur = 24;
-                    overlayCtx.shadowColor = '#00ffff';
+                    overlayCtx.shadowBlur = 26;
+                    overlayCtx.shadowColor = '#ffffff';
+
                     overlayCtx.beginPath();
                     overlayCtx.moveTo(0, cy - 40);
                     overlayCtx.lineTo(w, cy - 40);
                     overlayCtx.stroke();
+
                     overlayCtx.beginPath();
                     overlayCtx.moveTo(0, cy + 40);
                     overlayCtx.lineTo(w, cy + 40);
                     overlayCtx.stroke();
+
+                    overlayCtx.strokeStyle = 'rgba(0,255,255,0.38)';
+                    overlayCtx.shadowColor = '#00ffff';
+                    overlayCtx.beginPath();
+                    overlayCtx.arc(cx, cy, 160 + Math.sin(performance.now()/240) * 12, 0, Math.PI * 2);
+                    overlayCtx.stroke();
                     overlayCtx.restore();
+
+                    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
                     renderVisualEffects();
                     return;
                 }
@@ -1291,6 +1380,7 @@ User request: ${userText}
                 document.getElementById('center-reticle').style.display = 'none';
                 document.getElementById('main-hud').classList.remove('hud-visible');
                 document.body.classList.remove('shake', 'heavy-shake');
+                setScanLocked(false);
                 if (recognition) recognition.stop();
                 fridaySpeak("Target lost. I am putting the suit on standby network.", true);
             }
