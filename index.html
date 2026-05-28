@@ -31,7 +31,7 @@
         .flash-overlay { position: absolute; inset: 0; background: #fff; z-index: 99; opacity: 0; pointer-events: none; }
         .flash-active { animation: flash-bang 1s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; }
 
-        /* Scanning Sweep (New Feature) */
+        /* Scanning Sweep */
         .scan-line { position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: rgba(0, 255, 255, 0.8); box-shadow: 0 0 20px 5px rgba(0, 255, 255, 0.5); z-index: 15; opacity: 0; pointer-events: none; }
         .scan-active { animation: scan-sweep 2.5s ease-in-out; opacity: 1; }
         @keyframes scan-sweep { 0% { top: 0; opacity: 1; } 50% { top: 100%; opacity: 1; } 100% { top: 0; opacity: 0; } }
@@ -42,7 +42,7 @@
 
         @keyframes flash-bang { 0% { opacity: 1; } 20% { background: #00ffff; opacity: 0.85; } 100% { opacity: 0; background: transparent; } }
         
-        /* Camera shake on firing repulsors */
+        /* Camera shake */
         .shake { animation: screen-shake 0.2s ease-in-out infinite; }
         .heavy-shake { animation: screen-shake-heavy 0.1s ease-in-out infinite; }
         @keyframes screen-shake { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-3px, 2px); } 75% { transform: translate(3px, -2px); } }
@@ -102,7 +102,7 @@
                     </div>
                     <div class="flex-1">
                         <div class="text-[11px] text-cyan-400 font-black tracking-widest uppercase flex justify-between">
-                            <span>F.R.I.D.A.Y. v5.0</span>
+                            <span>F.R.I.D.A.Y. v5.0 (AI)</span>
                             <span class="text-[9px] text-cyan-600 font-mono" id="voice-indicator">STDBY</span>
                         </div>
                         <div id="friday-speech-text" class="text-xs text-white/90 mt-1.5 italic font-sans leading-relaxed transition-all duration-300">
@@ -122,6 +122,7 @@
             <div class="text-[9px] text-cyan-500/70 font-mono bg-black/40 p-3 border border-cyan-900/20 rounded terminal-scroll w-56 flex flex-col gap-1" id="log-feed">
                 <div>[SYS_LOG] Core link established.</div>
                 <div>[SYS_LOG] Nanotech topology mapping...</div>
+                <div>[SYS_LOG] Gemini AI Link Secure.</div>
             </div>
             
             <div id="flight-panel" class="hidden text-right font-mono bg-black/50 p-3 border border-orange-500/50 rounded-lg shadow-[0_0_15px_rgba(255,165,0,0.2)]">
@@ -135,9 +136,10 @@
             <div class="text-[11px] text-cyan-400 bg-black/75 p-4 border border-cyan-900/40 leading-relaxed tracking-wide rounded-lg backdrop-blur-md max-w-sm">
                 <span class="text-white font-black tracking-wider">// NEW COMMANDS</span><br>
                 <div class="mt-2 text-cyan-500 font-mono text-[10px]">
-                    <span class="text-white">> "Run health scan" / "Check biometrics"</span><br>
-                    <span class="text-white">> "Unibeam" / "Blast them"</span><br>
-                    <span class="text-white">> "Kaise ho Friday" / "Status report"</span>
+                    <span class="text-white">> "Health scan karo"</span><br>
+                    <span class="text-white">> "Stealth mode / Red mode"</span><br>
+                    <span class="text-white">> "Tumhara naam kya hai?" / "Kya chal raha hai?"</span><br>
+                    <span class="text-white">> [Ask Any Question to AI]</span>
                 </div>
             </div>
             
@@ -150,6 +152,9 @@
     </div>
 
     <script>
+        // --- GEMINI API INTEGRATION ---
+        const GEMINI_API_KEY = "AIzaSyBOwrEPdqKVBFjvsTYbP5E8pqNPFaPWPig";
+
         const video = document.querySelector('.input_video');
         const canvas = document.getElementById('main-canvas');
         const ctx = canvas.getContext('2d', { alpha: false });
@@ -159,7 +164,6 @@
         let isSuitedUp = false;
         let isDetecting = false;
         let missiles = 24;
-        let activeMissiles = [];
         let lastShieldState = false;
         let lastRepulsorState = false;
         let lastFlightState = false;
@@ -179,10 +183,38 @@
             if(feed.children.length > 7) feed.removeChild(feed.children[0]);
         }
 
-        // --- BILINGUAL TEXT TO SPEECH ENGINE (HINDI + ENGLISH) ---
+        // --- GEMINI AI FETCH FUNCTION ---
+        async function askGemini(prompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+            
+            const aiPrompt = `You are F.R.I.D.A.Y, an advanced AI system integrated into the Mark 85 armor designed by Verma Group. The user (your Boss) said: "${prompt}". Respond accurately, concisely, and STRICTLY IN HINDI. Do not use English script if possible, speak like a smart, respectful AI assistant. Keep it brief (1 to 3 sentences maximum).`;
+
+            const payload = {
+                contents: [{ parts: [{ text: aiPrompt }] }]
+            };
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (data.candidates && data.candidates.length > 0) {
+                    return data.candidates[0].content.parts[0].text.trim();
+                } else {
+                    return "माफ़ करना बॉस, मुझे डेटा प्रोसेस करने में दिक्कत आ रही है।";
+                }
+            } catch (error) {
+                console.error(error);
+                return "सर्वर से संपर्क टूट गया है बॉस। सिस्टम ऑफलाइन है।";
+            }
+        }
+
+        // --- HINDI TEXT TO SPEECH ENGINE ---
         function fridaySpeak(text) {
             document.getElementById('friday-speech-text').innerText = `"${text}"`;
-            addLog(`FRIDAY: ${text}`);
+            addLog(`FRIDAY: Responded.`);
             
             if ('speechSynthesis' in window) {
                 isFridaySpeaking = true;
@@ -192,20 +224,12 @@
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
                 
-                utterance.rate = 1.1; 
-                utterance.pitch = 1.05; 
+                utterance.rate = 1.05; 
+                utterance.pitch = 1.1; 
+                utterance.lang = 'hi-IN'; // STRICTLY HINDI
                 
-                // Identify Language Strategy
-                const isHindi = /[\u0900-\u097F]/.test(text) || text.includes("hai") || text.includes("hoon") || text.includes("sir") || text.includes("kijiye");
                 const voices = window.speechSynthesis.getVoices();
-                
-                let preferredVoice;
-                if (isHindi) {
-                    preferredVoice = voices.find(v => v.lang.includes('hi-IN') || v.name.toLowerCase().includes('hindi'));
-                } else {
-                    preferredVoice = voices.find(v => v.name.toLowerCase().includes('google us english') || v.name.toLowerCase().includes('zira'));
-                }
-                
+                const preferredVoice = voices.find(v => v.lang.includes('hi-IN') || v.name.toLowerCase().includes('hindi'));
                 if (preferredVoice) utterance.voice = preferredVoice;
                 
                 utterance.onend = () => {
@@ -236,7 +260,7 @@
             recognition = new SpeechRecognition();
             recognition.continuous = false;
             recognition.interimResults = false;
-            recognition.lang = 'hi-IN'; // Multi-lingual dialect mode engine
+            recognition.lang = 'hi-IN';
 
             recognition.onstart = () => {
                 if(!isFridaySpeaking) updateVoiceIndicator("LISTENING", "bg-emerald-400");
@@ -253,73 +277,43 @@
             recognition.onresult = (event) => {
                 const command = event.results[0][0].transcript.toLowerCase().trim();
                 document.getElementById('user-speech-text').innerText = `> "${command.toUpperCase()}"`;
-                processBilingualComms(command);
+                processComms(command);
             };
         }
 
-        // --- ADVANCED COGNITIVE DISPATCHER ---
-        function processBilingualComms(cmd) {
-            let reply = "";
+        // --- ADVANCED COGNITIVE DISPATCHER WITH GEMINI ---
+        async function processComms(cmd) {
+            updateVoiceIndicator("THINKING", "bg-purple-500");
+            document.getElementById('friday-speech-text').innerText = "Processing neural query...";
 
-            // Feature 3: Health/Biometric Scan 
+            // 1. Check for UI-specific triggers first
             if (cmd.includes('scan') || cmd.includes('health') || cmd.includes('biometric')) {
                 document.getElementById('scan-line').classList.add('scan-active');
-                playFX('suit'); // reuse tech sound
+                playFX('suit'); 
                 setTimeout(() => document.getElementById('scan-line').classList.remove('scan-active'), 2500);
-                reply = "Verma Health Scan initialized. Vitals are steady. Heart rate aur core temperature normal hai, Boss.";
             }
-            // Feature 2: Unibeam voice prep
-            else if (cmd.includes('unibeam') || cmd.includes('blast')) {
-                reply = "Unibeam routing ready. Apne dono hands cross kijiye chest par to fire, Sir.";
-            }
-            // Status Query
-            else if (cmd.includes('status') || cmd.includes('report') || cmd.includes('suit ka haal')) {
-                reply = `All systems are green, Boss. Matrix core power is at ${Math.floor(powerCore)} percent.`;
-            } 
-            else if (cmd.includes('kaise ho') || cmd.includes('how are you')) {
-                reply = "Main badiya hoon, Boss! Verma Group Advanced Tech Program fully active hai.";
-            } 
-            else if (cmd.includes('hello') || cmd.includes('friday') || cmd.includes('suno')) {
-                reply = "Online and ready, Sir. Systems are looking sharp.";
-            }
-            // Power Grid Operations
-            else if (cmd.includes('charge') || cmd.includes('power up')) {
+            if (cmd.includes('charge') || cmd.includes('power up')) {
                 powerCore = 100;
                 document.getElementById('power-val').innerText = powerCore;
-                reply = "Nanotech energy array fully optimized. Power grid 100% par hai.";
             } 
-            else if (cmd.includes('stealth mode')) {
+            if (cmd.includes('stealth mode')) {
                 changeHUDTheme('#a855f7');
-                reply = "Stealth configuration loaded. Visual signatures minimized.";
             }
-            else if (cmd.includes('danger') || cmd.includes('red')) {
+            if (cmd.includes('danger') || cmd.includes('red')) {
                 changeHUDTheme('#ef4444');
-                reply = "Tactical combat configuration engaged.";
             }
-            else if (cmd.includes('normal') || cmd.includes('cyan')) {
+            if (cmd.includes('normal') || cmd.includes('cyan')) {
                 changeHUDTheme('#00ffff');
-                reply = "Standard tactical blueprint restored.";
             }
-            else if (cmd.includes('thermal') || cmd.includes('night vision')) {
+            if (cmd.includes('thermal') || cmd.includes('night vision')) {
                 isThermal = !isThermal;
-                if(isThermal) {
-                    canvas.classList.add('thermal-mode');
-                    reply = "Infrared spectral grid activated.";
-                } else {
-                    canvas.classList.remove('thermal-mode');
-                    reply = "Standard optical configuration par wapas switch kar diya hai.";
-                }
-            }
-            else {
-                const choices = [
-                    "Understood, Sir. Core arrays update ho chuke hain.",
-                    "Telemetry captured. Vector updates mapping processed.",
-                    "Ji Boss, task logic optimize kar di hai."
-                ];
-                reply = choices[Math.floor(Math.random() * choices.length)];
+                if(isThermal) canvas.classList.add('thermal-mode');
+                else canvas.classList.remove('thermal-mode');
             }
 
-            fridaySpeak(reply);
+            // 2. Fetch the actual response from Gemini AI
+            let aiReply = await askGemini(cmd);
+            fridaySpeak(aiReply);
         }
 
         function changeHUDTheme(hex) {
@@ -328,6 +322,11 @@
             document.getElementById('brand-panel').style.borderColor = hex;
             document.getElementById('weapon-panel').style.borderColor = hex;
             document.getElementById('center-reticle').style.borderColor = hex;
+        }
+
+        function drainPower(amount) {
+            powerCore = Math.max(0, powerCore - amount);
+            document.getElementById('power-val').innerText = Math.floor(powerCore);
         }
 
         // --- SYNTHESIZED SOUND MODULES ---
@@ -351,12 +350,6 @@
                 gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.15, now + 0.02);
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
                 osc.start(now); osc.stop(now + 0.2);
-            } else if (type === 'missile') {
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(650, now);
-                osc.frequency.exponentialRampToValueAtTime(90, now + 0.45);
-                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.2, now + 0.04);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
-                osc.start(now); osc.stop(now + 0.45);
             } else if (type === 'unibeam') {
                 osc.type = 'square'; osc.frequency.setValueAtTime(100, now);
                 osc.frequency.exponentialRampToValueAtTime(800, now + 0.5);
@@ -382,7 +375,7 @@
             
             setTimeout(() => {
                 document.getElementById('main-hud').classList.add('hud-visible');
-                fridaySpeak("Welcome back Boss. Mark Eighty-Five systems calibrated. Main aapki command ke liye taiyar hoon.");
+                fridaySpeak("नमस्ते बॉस। मार्क एटी-फाइव सिस्टम तैयार है। मैं आपकी कमांड के लिए इंतज़ार कर रही हूँ।");
                 if (recognition) try { recognition.start(); } catch(e) {}
             }, 600);
         }
@@ -433,18 +426,17 @@
             overlayCtx.restore();
         }
 
-        // Modified for Flight Boosters
+        // Flight Boosters
         function drawThruster(x, y, size, isFlight) {
             overlayCtx.save();
             overlayCtx.beginPath();
             overlayCtx.arc(x, y, size, 0, Math.PI * 2);
             
             if (isFlight) {
-                // Draw downward flame
                 const grad = overlayCtx.createLinearGradient(x, y, x, y + size * 4);
                 grad.addColorStop(0, '#ffffff');
                 grad.addColorStop(0.2, '#00ffff');
-                grad.addColorStop(0.6, '#ff8c00'); // Orange booster tail
+                grad.addColorStop(0.6, '#ff8c00'); 
                 grad.addColorStop(1, 'transparent');
                 
                 overlayCtx.fillStyle = grad;
@@ -462,7 +454,7 @@
             overlayCtx.restore();
         }
 
-        // Feature 2: Unibeam Rendering
+        // Unibeam Rendering
         function drawUnibeam(x, y, h) {
             overlayCtx.save();
             const width = 150;
@@ -525,7 +517,7 @@
                     const wristDist = Math.hypot(lWrist.x - rWrist.x, lWrist.y - rWrist.y);
                     const shieldActive = (wristDist < 0.08 && lWrist.y > lShoulder.y);
                     
-                    // Feature 2: Unibeam Logic (wrists crossed close to chest)
+                    // Unibeam Logic (wrists crossed close to chest)
                     const isUnibeamPose = (wristDist < 0.1 && Math.abs(lWrist.y - chestY/h) < 0.15 && Math.abs(rWrist.y - chestY/h) < 0.15);
 
                     if (isUnibeamPose) {
@@ -533,7 +525,7 @@
                         document.body.classList.add('heavy-shake');
                         drainPower(1.0);
                         if (!unibeamCharging) { 
-                            fridaySpeak("Unibeam discharging. Clear the path!"); 
+                            fridaySpeak("यूनिबीम तैयार है बॉस, रास्ता साफ करें!"); 
                             playFX('unibeam'); 
                         }
                         unibeamCharging = true;
@@ -543,13 +535,13 @@
                         
                         if (shieldActive) {
                             drawShield(chestX, chestY, 240 * scale);
-                            if (!lastShieldState) { fridaySpeak("Hardlight shielding protocol active."); addLog("Shield optimized."); }
+                            if (!lastShieldState) { fridaySpeak("शील्ड प्रोटोकॉल एक्टिवेट कर दिया गया है।"); addLog("Shield optimized."); }
                             drainPower(0.25);
                         }
                     }
                     lastShieldState = shieldActive;
 
-                    // Feature 1: Flight Boosters / Repulsors
+                    // Flight Boosters / Repulsors
                     const lFire = lWrist.y < lElbow.y - 0.05;
                     const rFire = rWrist.y < rElbow.y - 0.05;
                     const isFlyingPose = Math.abs(lWrist.y - lShoulder.y) < 0.1 && Math.abs(rWrist.y - rShoulder.y) < 0.1 && !lFire && !rFire && !isUnibeamPose;
@@ -559,15 +551,13 @@
                     if (isFlyingPose) {
                         flightPanel.classList.remove('hidden');
                         drainPower(0.15);
-                        // Draw thrusters pointing down from hands
                         if (lWrist.visibility > 0.5) drawThruster(lWrist.x * w, lWrist.y * h, 18 * scale, true);
                         if (rWrist.visibility > 0.5) drawThruster(rWrist.x * w, rWrist.y * h, 18 * scale, true);
                         
-                        if(!lastFlightState) { fridaySpeak("Flight boosters engaged. Stabilizing altitude."); }
+                        if(!lastFlightState) { fridaySpeak("फ्लाइट बूस्टर्स चालू कर दिए गए हैं।"); }
                     } else {
                         flightPanel.classList.add('hidden');
                         
-                        // Standard Repulsors
                         if (lWrist.visibility > 0.5 && !isUnibeamPose) drawThruster(lWrist.x * w, lWrist.y * h, 18 * scale, false);
                         if (rWrist.visibility > 0.5 && !isUnibeamPose) drawThruster(rWrist.x * w, rWrist.y * h, 18 * scale, false);
                     }
@@ -576,98 +566,23 @@
                     if ((lFire || rFire) && !isUnibeamPose && !isFlyingPose) {
                         document.body.classList.add('shake');
                         drainPower(0.35);
-                        if (!lastRepulsorState) { fridaySpeak("Repulsor matrix discharging."); }
                         if (Math.random() > 0.75) playFX('repulsor');
-                        
-                        // Blast visuals
-                        if(lFire) { overlayCtx.beginPath(); overlayCtx.arc(lWrist.x*w, lWrist.y*h, 25*scale, 0, Math.PI*2); overlayCtx.fillStyle='#fff'; overlayCtx.fill(); }
-                        if(rFire) { overlayCtx.beginPath(); overlayCtx.arc(rWrist.x*w, rWrist.y*h, 25*scale, 0, Math.PI*2); overlayCtx.fillStyle='#fff'; overlayCtx.fill(); }
-
-                    } else if (!isUnibeamPose) {
-                        document.body.classList.remove('shake');
-                    }
-                    lastRepulsorState = (lFire || rFire);
-
-                    // Micro-Missile Payload Launch Layout
-                    const rHandToLShoulder = Math.hypot(rWrist.x - lShoulder.x, rWrist.y - lShoulder.y) < 0.08;
-                    const lHandToRShoulder = Math.hypot(lWrist.x - rShoulder.x, lWrist.y - rShoulder.y) < 0.08;
-                    
-                    if ((rHandToLShoulder || lHandToRShoulder) && missiles > 0 && Math.random() > 0.94) {
-                        activeMissiles.push({ 
-                            x: (rHandToLShoulder ? lShoulder.x : rShoulder.x) * w, 
-                            y: (rHandToLShoulder ? lShoulder.y : rShoulder.y) * h 
-                        });
-                        missiles--; 
-                        document.getElementById('missile-count').innerText = missiles;
-                        playFX('missile');
-                        
-                        if(missiles === 0) {
-                            document.getElementById('weapon-status').innerText = "ORDNANCE DEPLETED";
-                            document.getElementById('weapon-status').className = "text-[9px] text-rose-500 tracking-widest mt-1.5 uppercase font-mono animate-pulse";
-                            fridaySpeak("Alert! Micro missile inventory khali ho chuki hai.");
-                        }
                     }
                 }
-            } else if (isSuitedUp) {
-                isSuitedUp = false; isDetecting = false;
-                document.getElementById('status-container').style.opacity = '1';
-                document.getElementById('sync-status').innerText = "// SYSTEM DISCONNECTED // AWAITING NEURAL SYNAPSE";
-                document.getElementById('center-reticle').style.display = 'none';
-                document.getElementById('main-hud').classList.remove('hud-visible');
-                document.body.classList.remove('shake', 'heavy-shake');
-                if (recognition) recognition.stop();
-                fridaySpeak("Target dropped. Suit ko standby network par dal rhi hoon.");
-            }
-
-            // Render Active Launched Missiles
-            for (let i = activeMissiles.length - 1; i >= 0; i--) {
-                let m = activeMissiles[i]; m.y -= 25; 
-                overlayCtx.beginPath(); overlayCtx.arc(m.x, m.y, 4, 0, Math.PI*2);
-                overlayCtx.fillStyle = '#ffffff'; overlayCtx.fill();
-                if (m.y < 0) activeMissiles.splice(i, 1);
-            }
-        }
-
-        function drainPower(amount) {
-            powerCore = Math.max(0, powerCore - amount);
-            document.getElementById('power-val').innerText = Math.floor(powerCore);
-            if(powerCore <= 15 && powerCore > 14.6) {
-                fridaySpeak("Warning Boss! Arc Reactor power critically low hai. Core charge kijiye.");
             }
         }
 
         const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
-        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, enableSegmentation: false, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         pose.onResults(onResults);
 
-        const camera = new Camera(video, { onFrame: async () => { await pose.send({image: video}); }, width: 1280, height: 720 });
+        const camera = new Camera(video, { onFrame: async () => { await pose.send({image: video}); }, width: 640, height: 480 });
         camera.start();
 
-        initVoiceRecognition();
-
-        // Regenerate Energy Matrix Arrays Over-Time
-        setInterval(() => {
-            if(isSuitedUp && !lastRepulsorState && !lastShieldState && !unibeamCharging && !lastFlightState) {
-                if(powerCore < 100) {
-                    powerCore = Math.min(100, powerCore + 0.4);
-                    document.getElementById('power-val').innerText = Math.floor(powerCore);
-                }
-            }
-        }, 1200);
-
-        // Feature 4: Autonomous Proactive F.R.I.D.A.Y. Recommendations
-        setInterval(() => {
-            if(isSuitedUp && !isFridaySpeaking && Math.random() > 0.6) {
-                const recommendations = [
-                    "Boss, main suggest karungi ki aap flight boosters try karein. Arms down rakhiye.",
-                    "Sir, Verma Health Scan available hai. Aap 'run health scan' bol sakte hain.",
-                    "Ordnance stack stable hai, Boss. Aap hands cross karke Unibeam blast fire kar sakte hain.",
-                    "Stealth mode standby par hai sir, kya activate karun?"
-                ];
-                const rec = recommendations[Math.floor(Math.random() * recommendations.length)];
-                fridaySpeak(rec);
-            }
-        }, 20000); // Analyzes every 20 seconds
+        window.onload = () => {
+            initVoiceRecognition();
+            window.speechSynthesis.onvoiceschanged = () => { console.log("Voices loaded."); };
+        };
     </script>
 </body>
 </html>
