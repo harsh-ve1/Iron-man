@@ -113,7 +113,7 @@
                 </div>
                 <div class="border-t border-cyan-900/50 pt-2.5 mt-0.5">
                     <div id="user-speech-text" class="text-[10px] text-cyan-500 font-mono tracking-wider truncate uppercase">
-                        > Systems initialized. Awaiting feedback...
+                        > Systems initialized. Awaiting feedback... Say "track scan" or "reload missiles".
                     </div>
                 </div>
             </div>
@@ -138,7 +138,7 @@
                 <div class="mt-2 text-cyan-500 font-mono text-[10px]">
                     <span class="text-white">> "Run health scan" / "Check biometrics"</span><br>
                     <span class="text-white">> "Unibeam" / "Blast them"</span><br>
-                    <span class="text-white">> "How are you Friday" / "Status report" / "Reload missiles" / "Analyze this"</span>
+                    <span class="text-white">> "How are you Friday" / "Status report" / "Reload missiles" / "Track scan" / "Analyze this"</span>
                 </div>
             </div>
             
@@ -426,9 +426,15 @@ ${userText}
                 const prompt = `
 You are F.R.I.D.A.Y. inside a futuristic HUD.
 Analyze the image carefully and answer in English only.
-The user wants to identify objects, surroundings, text, or any visible items in front of the camera.
-Be specific, concise, and honest. If the image is unclear, say so.
-If the object is visible, identify what it most likely is and mention key visual clues.
+
+Rules:
+- Identify the main visible object first.
+- If one clear object is present, respond in the exact style: "This is an apple." or "This is a bottle."
+- If the object is unclear, say so clearly and honestly.
+- If multiple objects are visible, name the most important one first and mention the others briefly.
+- Keep the answer short, direct, and confident.
+- Do not mention that you are an AI unless the image is unclear.
+
 User request: ${userText}
 `;
                 const res = await fetch(GEMINI_ENDPOINT, {
@@ -450,7 +456,7 @@ User request: ${userText}
                             ]
                         }],
                         generationConfig: {
-                            temperature: 0.15,
+                            temperature: 0.1,
                             topP: 0.9,
                             maxOutputTokens: 260,
                             thinkingConfig: { thinkingLevel: "low" }
@@ -602,25 +608,33 @@ User request: ${userText}
             };
         }
 
-        function launchMissile(side = 'left') {
+        function launchMissile(side = 'left', startPoint = null) {
             const w = overlayCanvas.width;
             const h = overlayCanvas.height;
-            const origin = side === 'left'
-                ? { x: w * 0.42, y: h * 0.58 }
-                : { x: w * 0.58, y: h * 0.58 };
+
+            const origin = startPoint || (side === 'left'
+                ? { x: w * 0.44, y: h * 0.58 }
+                : { x: w * 0.56, y: h * 0.58 });
+
+            const targetLift = 0.85 + Math.random() * 0.9;
+            const targetSpread = side === 'left'
+                ? -2.4 - Math.random() * 1.4
+                : 2.4 + Math.random() * 1.4;
 
             activeMissiles.push({
                 x: origin.x,
                 y: origin.y,
-                vx: side === 'left' ? -3.2 - Math.random() * 0.7 : 3.2 + Math.random() * 0.7,
-                vy: -5.4 - Math.random() * 0.8,
-                life: 120,
+                vx: targetSpread,
+                vy: -5.2 - Math.random() * 1.0,
+                life: 128,
                 trail: [],
-                side
+                side,
+                lift: targetLift
             });
 
-            spawnParticles(origin.x, origin.y, 16, ['#ffffff', '#00ffff', '#60a5fa']);
+            spawnParticles(origin.x, origin.y, 18, ['#ffffff', '#00ffff', '#60a5fa']);
             spawnRipple(origin.x, origin.y, '#00ffff');
+            triggerFxLabel('ARM LAUNCH', '#00ffff');
             playFX('missile');
         }
 
@@ -636,18 +650,24 @@ User request: ${userText}
             if (containsAny(command, [
                 'refill missile', 'refill missiles', 'reload missile', 'reload missiles',
                 'rearm missile', 'rearm missiles', 'missile refill', 'replenish missiles',
-                'reload ordnance', 'ordnance reload', 'missiles full', 'reset missiles'
+                'reload ordnance', 'ordnance reload', 'missiles full', 'reset missiles',
+                'missile reload', 'arm missiles'
             ])) {
                 refillMissiles(true);
                 return;
             }
 
             if (containsAny(command, [
-                'analyze this', 'analyze object', 'analyse object', 'analyze the object',
+                'track scan', 'scan object', 'analyze this', 'analyze object', 'analyse object', 'analyze the object',
                 'what do you see', 'what is this', 'identify this', 'identify object',
                 'look around', 'scan surroundings', 'scan the room', 'inspect object',
-                'describe this', 'recognize object', 'object analysis'
+                'describe this', 'recognize object', 'object analysis', 'vision scan'
             ])) {
+                document.getElementById('scan-line').classList.add('scan-active');
+                triggerFxLabel('TRACK SCAN', '#00ffff');
+                spawnRipple(window.innerWidth / 2, window.innerHeight / 2, '#00ffff');
+                playFX('suit');
+                setTimeout(() => document.getElementById('scan-line').classList.remove('scan-active'), 2500);
                 const visionReply = await analyzeSceneWithGemini(command);
                 fridaySpeak(visionReply || "I could not identify the object clearly.", true);
                 return;
@@ -821,6 +841,7 @@ User request: ${userText}
             setTimeout(() => {
                 document.getElementById('main-hud').classList.add('hud-visible');
                 fridaySpeak("Welcome back, Boss. Mark Eighty-Five systems are calibrated. I am ready for your command.", true);
+                triggerFxLabel("VISION ONLINE", "#00ffff");
                 startRecognitionSafe(120);
             }, 600);
         }
@@ -982,13 +1003,13 @@ User request: ${userText}
             const trail = missile.trail || [];
             for (let i = 1; i < trail.length; i++) {
                 const a = i / trail.length;
-                overlayCtx.globalAlpha = a * 0.75;
+                overlayCtx.globalAlpha = a * 0.7;
                 overlayCtx.beginPath();
                 overlayCtx.moveTo(trail[i - 1].x, trail[i - 1].y);
                 overlayCtx.lineTo(trail[i].x, trail[i].y);
-                overlayCtx.lineWidth = 1.5 + a * 5;
-                overlayCtx.strokeStyle = `rgba(255,255,255,${0.15 + a * 0.65})`;
-                overlayCtx.shadowBlur = 20;
+                overlayCtx.lineWidth = 1.2 + a * 5.5;
+                overlayCtx.strokeStyle = `rgba(255,255,255,${0.12 + a * 0.72})`;
+                overlayCtx.shadowBlur = 18;
                 overlayCtx.shadowColor = '#00ffff';
                 overlayCtx.stroke();
             }
@@ -997,16 +1018,16 @@ User request: ${userText}
             overlayCtx.translate(missile.x, missile.y);
             overlayCtx.rotate(angle + Math.PI / 2);
 
-            const bodyGrad = overlayCtx.createLinearGradient(0, -12, 0, 14);
+            const bodyGrad = overlayCtx.createLinearGradient(0, -16, 0, 18);
             bodyGrad.addColorStop(0, '#ffffff');
-            bodyGrad.addColorStop(0.3, '#00ffff');
+            bodyGrad.addColorStop(0.25, '#00ffff');
             bodyGrad.addColorStop(1, '#0f172a');
 
             overlayCtx.beginPath();
             if (typeof overlayCtx.roundRect === 'function') {
-                overlayCtx.roundRect(-4, -14, 8, 22, 4);
+                overlayCtx.roundRect(-4, -16, 8, 26, 4);
             } else {
-                overlayCtx.rect(-4, -14, 8, 22);
+                overlayCtx.rect(-4, -16, 8, 26);
             }
             overlayCtx.fillStyle = bodyGrad;
             overlayCtx.shadowBlur = 18;
@@ -1014,12 +1035,12 @@ User request: ${userText}
             overlayCtx.fill();
 
             overlayCtx.beginPath();
-            overlayCtx.moveTo(-6, 6);
-            overlayCtx.lineTo(0, 18);
-            overlayCtx.lineTo(6, 6);
+            overlayCtx.moveTo(-7, 6);
+            overlayCtx.lineTo(0, 22);
+            overlayCtx.lineTo(7, 6);
             overlayCtx.closePath();
-            overlayCtx.fillStyle = 'rgba(255,140,0,0.85)';
-            overlayCtx.shadowBlur = 12;
+            overlayCtx.fillStyle = 'rgba(255,140,0,0.88)';
+            overlayCtx.shadowBlur = 14;
             overlayCtx.shadowColor = '#ff8c00';
             overlayCtx.fill();
 
@@ -1044,8 +1065,8 @@ User request: ${userText}
 
                 if (isSuitedUp) {
                     const lShoulder = lm[11], rShoulder = lm[12];
-                    const lWrist = lm[15], rWrist = lm[16];
                     const lElbow = lm[13], rElbow = lm[14];
+                    const lWrist = lm[15], rWrist = lm[16];
 
                     const chestX = ((lShoulder.x + rShoulder.x) / 2) * w;
                     const chestY = ((lShoulder.y + rShoulder.y) / 2) * h + 30;
@@ -1143,13 +1164,29 @@ User request: ${userText}
                     }
                     lastRepulsorState = (lFire || rFire);
 
-                    const rHandToLShoulder = Math.hypot(rWrist.x - lShoulder.x, rWrist.y - lShoulder.y) < 0.08;
-                    const lHandToRShoulder = Math.hypot(lWrist.x - rShoulder.x, lWrist.y - rShoulder.y) < 0.08;
+                    const leftForearmAim = Math.hypot(lWrist.x - lElbow.x, lWrist.y - lElbow.y) < 0.16 || lWrist.y < lElbow.y + 0.05;
+                    const rightForearmAim = Math.hypot(rWrist.x - rElbow.x, rWrist.y - rElbow.y) < 0.16 || rWrist.y < rElbow.y + 0.05;
+                    const leftLaunchReady = lWrist.visibility > 0.5 && lElbow.visibility > 0.5 && leftForearmAim && lWrist.x < lElbow.x + 0.18;
+                    const rightLaunchReady = rWrist.visibility > 0.5 && rElbow.visibility > 0.5 && rightForearmAim && rWrist.x > rElbow.x - 0.18;
 
-                    if ((rHandToLShoulder || lHandToRShoulder) && missiles > 0 && Math.random() > 0.92) {
-                        launchMissile(rHandToLShoulder ? 'left' : 'right');
+                    if ((leftLaunchReady || rightLaunchReady) && missiles > 0 && Math.random() > 0.92) {
+                        const side = leftLaunchReady ? 'left' : 'right';
+                        const origin = side === 'left'
+                            ? {
+                                x: ((lElbow.x + lWrist.x) / 2) * w - 18,
+                                y: ((lElbow.y + lWrist.y) / 2) * h
+                              }
+                            : {
+                                x: ((rElbow.x + rWrist.x) / 2) * w + 18,
+                                y: ((rElbow.y + rWrist.y) / 2) * h
+                              };
+
+                        launchMissile(side, origin);
                         missiles--;
                         syncMissileUI();
+                        triggerFxLabel('MISSILE FIRED', '#00ffff');
+                        spawnParticles(origin.x, origin.y, 12, ['#ffffff', '#00ffff', '#60a5fa']);
+                        spawnRipple(origin.x, origin.y, '#00ffff');
 
                         if (missiles === 0) {
                             setWeaponStatus("ORDNANCE DEPLETED", true);
