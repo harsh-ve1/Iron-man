@@ -3,31 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mark 85 - Verma Group Nanotech HUD</title>
+    <title>Mark 85 - Verma Group Advanced AI HUD</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
     
     <style>
-        body, html { margin: 0; width: 100vw; height: 100vh; overflow: hidden; background: #030303; color: #00ffff; font-family: 'Courier New', Courier, monospace; user-select: none; }
+        body, html { margin: 0; width: 100vw; height: 100vh; overflow: hidden; background: #020202; color: #00ffff; font-family: 'Courier New', Courier, monospace; user-select: none; }
         
-        /* High-Contrast Professional Overlays */
-        .vignette { position: absolute; inset: 0; box-shadow: inset 0 0 200px rgba(0,0,0,0.95); z-index: 10; pointer-events: none; }
-        .grid-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(0, 255, 255, 0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 255, 0.05) 1px, transparent 1px); background-size: 50px 50px; z-index: 11; pointer-events: none; opacity: 0.3; }
+        /* Premium Cinematic Aesthetics */
+        .vignette { position: absolute; inset: 0; box-shadow: inset 0 0 250px rgba(0,0,0,0.98); z-index: 10; pointer-events: none; }
+        .grid-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px); background-size: 40px 40px; z-index: 11; pointer-events: none; opacity: 0.4; }
         
         .input_video { position: absolute; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
-        .output_canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); filter: contrast(1.3) grayscale(0.2); z-index: 1; }
+        .output_canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); filter: contrast(1.35) brightness(0.85); z-index: 1; }
         .overlay_canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: 5; pointer-events: none; }
 
-        /* Minimalist UI */
-        .hud-ui { position: absolute; inset: 0; z-index: 20; pointer-events: none; opacity: 0; transition: opacity 1s ease-in; display: flex; flex-direction: column; justify-content: space-between; padding: 2rem; }
+        /* Minimal Tech UI Layout */
+        .hud-ui { position: absolute; inset: 0; z-index: 20; pointer-events: none; opacity: 0; transition: opacity 1s cubic-bezier(0.075, 0.82, 0.165, 1); display: flex; flex-direction: column; justify-content: space-between; padding: 2.5rem; }
         .hud-visible { opacity: 1; }
         
         .sys-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 50; }
         .flash-overlay { position: absolute; inset: 0; background: #fff; z-index: 99; opacity: 0; pointer-events: none; }
-        .flash-active { animation: flash-bang 1.5s ease-out forwards; }
+        .flash-active { animation: flash-bang 1.2s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; }
 
-        @keyframes flash-bang { 0% { opacity: 1; } 10% { background: #00ffff; opacity: 0.8; } 100% { opacity: 0; background: transparent; } }
+        /* FRIDAY Transcript Box */
+        .friday-box { background: rgba(0, 10, 15, 0.85); border: 1px solid rgba(0, 255, 255, 0.3); box-shadow: 0 0 20px rgba(0, 255, 255, 0.1); }
+
+        @keyframes flash-bang { 0% { opacity: 1; } 15% { background: #00ffff; opacity: 0.9; } 100% { opacity: 0; background: transparent; } }
     </style>
 </head>
 <body>
@@ -41,33 +44,40 @@
     <div id="flash" class="flash-overlay"></div>
 
     <div id="status-container" class="sys-msg">
-        <div class="text-3xl font-bold tracking-[0.5em] text-white drop-shadow-[0_0_10px_#00ffff]">CALIBRATING AI</div>
-        <div class="text-xs mt-4 text-cyan-500 tracking-widest">AWAITING SUBJECT IN FRAME</div>
+        <div class="text-2xl font-bold tracking-[0.6em] text-white drop-shadow-[0_0_8px_#00ffff]">MARK 85 ARCHITECTURE</div>
+        <div class="text-[11px] mt-4 text-cyan-500 tracking-widest uppercase animate-pulse">Awaiting Neural Link / Step in Frame</div>
     </div>
 
     <div id="main-hud" class="hud-ui">
         <div class="flex justify-between items-start">
-            <div class="border-l-2 border-cyan-500 pl-4 bg-black/60 backdrop-blur-md py-2">
-                <div class="text-[10px] text-cyan-600 tracking-widest">VERMA GROUP // NANOTECH DIV</div>
-                <div class="text-xl font-bold text-white tracking-widest mt-1">SYS_POWER: <span id="power-val">100</span>%</div>
+            <div class="border-l-2 border-cyan-400 pl-4 bg-black/50 backdrop-blur-md py-3 pr-8">
+                <div class="text-[10px] text-cyan-600 tracking-widest font-bold">VERMA GROUP // MILITARY TECH</div>
+                <div class="text-2xl font-black text-white tracking-wider mt-1">NANO_PWR: <span id="power-val">100</span>%</div>
+                <div class="text-[10px] text-green-400 tracking-widest mt-1 font-mono">// NEURAL CONNECTION STABLE</div>
             </div>
             
-            <div class="text-right border-r-2 border-cyan-500 pr-4 bg-black/60 backdrop-blur-md py-2">
-                <div class="text-[10px] text-cyan-600 tracking-widest">TARGETING & DEFENSE</div>
-                <div class="text-lg font-bold text-green-400 tracking-widest mt-1">ONLINE</div>
+            <div class="friday-box p-3 rounded flex items-center gap-4 max-w-sm pointer-events-auto">
+                <div class="w-3 h-3 rounded-full bg-cyan-400 animate-ping absolute"></div>
+                <div class="w-3 h-3 rounded-full bg-cyan-500"></div>
+                <div>
+                    <div class="text-[10px] text-cyan-400 font-bold tracking-widest">F.R.I.D.A.Y. v4.2</div>
+                    <div id="friday-speech-text" class="text-xs text-white mt-1 italic font-sans leading-tight">"Systems monitoring active..."</div>
+                </div>
             </div>
         </div>
 
         <div class="flex justify-between items-end">
-            <div class="text-xs text-cyan-500 bg-black/80 p-3 border border-cyan-900 leading-relaxed tracking-wider">
-                [GESTURES]<br>
-                > RAISE HANDS: Repulsors<br>
-                > CROSS WRISTS: Energy Shield<br>
-                > TOUCH SHOULDER: Micro-Missile
+            <div class="text-xs text-cyan-400 bg-black/70 p-4 border border-cyan-900/60 leading-relaxed tracking-wider rounded backdrop-blur-sm">
+                <span class="text-white font-bold">// GESTURE PROTOCOLS:</span><br>
+                > ARMS UP       : Fire Nano-Repulsors<br>
+                > CROSS WRISTS  : Deploy Hex-Energy Shield<br>
+                > TOUCH SHOULDER: Launch Micro-Missiles
             </div>
-            <div class="text-right">
-                <div class="text-[10px] text-cyan-600 tracking-widest mb-1">MISSILE PAYLOAD</div>
-                <div id="missile-count" class="text-3xl text-white font-bold drop-shadow-[0_0_8px_#00ffff]">24</div>
+            
+            <div class="text-right border-r-2 border-cyan-400 pr-4 bg-black/50 backdrop-blur-md py-3 pl-8">
+                <div class="text-[10px] text-cyan-600 tracking-widest mb-1 font-bold">TACTICAL WEAPON LOAD</div>
+                <div id="missile-count" class="text-4xl text-white font-black drop-shadow-[0_0_10px_#00ffff]">24</div>
+                <div class="text-[9px] text-cyan-400 tracking-widest mt-1 uppercase">Micro-Missiles Armed</div>
             </div>
         </div>
     </div>
@@ -82,11 +92,33 @@
         let isSuitedUp = false;
         let isDetecting = false;
         let missiles = 24;
-        let activeMissiles = []; // To track flying missiles
+        let activeMissiles = [];
+        let lastShieldState = false;
+        let lastRepulsorState = false;
         
-        // Zero-Lag Audio Engine
+        // FRIDAY Voice Engine (Web Speech API)
+        function fridaySpeak(text) {
+            document.getElementById('friday-speech-text').innerText = `"${text}"`;
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel(); // Stop any ongoing speech
+                const utterance = new SpeechSynthesisUtterance(text);
+                
+                // Fine-tuning voice for sleek, smart female AI character
+                utterance.rate = 1.1; 
+                utterance.pitch = 1.15; 
+                
+                // Try finding an English female voice asset
+                const voices = window.speechSynthesis.getVoices();
+                const femaleVoice = voices.find(v => v.name.toLowerCase().includes('google us english') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('female'));
+                if (femaleVoice) utterance.voice = femaleVoice;
+                
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // Zero-Lag Synth Audio Engine for Sound Effects
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playSound(type) {
+        function playFX(type) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
@@ -94,28 +126,23 @@
             const now = audioCtx.currentTime;
 
             if (type === 'suit') {
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(40, now);
-                osc.frequency.exponentialRampToValueAtTime(800, now + 1.2);
-                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.4, now + 0.2);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 1.5);
-                osc.start(now); osc.stop(now + 1.5);
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(45, now);
+                osc.frequency.exponentialRampToValueAtTime(850, now + 1.4);
+                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.35, now + 0.2);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 1.4);
+                osc.start(now); osc.stop(now + 1.4);
             } else if (type === 'repulsor' || type === 'booster') {
-                osc.type = 'square'; osc.frequency.setValueAtTime(100, now);
-                osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
-                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.15, now + 0.05);
+                osc.type = 'square'; osc.frequency.setValueAtTime(120, now);
+                osc.frequency.exponentialRampToValueAtTime(1400, now + 0.15);
+                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.12, now + 0.03);
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
                 osc.start(now); osc.stop(now + 0.2);
-            } else if (type === 'shield') {
-                osc.type = 'sine'; osc.frequency.setValueAtTime(300, now);
-                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.2, now + 0.1);
-                gain.gain.linearRampToValueAtTime(0, now + 0.5);
-                osc.start(now); osc.stop(now + 0.5);
             } else if (type === 'missile') {
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(900, now);
-                osc.frequency.exponentialRampToValueAtTime(100, now + 0.5);
-                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
-                osc.start(now); osc.stop(now + 0.5);
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(700, now);
+                osc.frequency.exponentialRampToValueAtTime(80, now + 0.4);
+                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.25, now + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now); osc.stop(now + 0.4);
             }
         }
 
@@ -124,17 +151,77 @@
             overlayCanvas.width = window.innerWidth; overlayCanvas.height = window.innerHeight;
         }
         window.addEventListener('resize', resize); resize();
+        // Trigger voice sync load
+        if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
 
         function triggerSuitUp() {
             isSuitedUp = true;
             document.getElementById('status-container').style.opacity = '0';
             document.getElementById('flash').classList.add('flash-active');
-            playSound('suit');
-            setTimeout(() => document.getElementById('main-hud').classList.add('hud-visible'), 800);
+            playFX('suit');
+            
+            // UI Trigger and Voice introduction
+            setTimeout(() => {
+                document.getElementById('main-hud').classList.add('hud-visible');
+                fridaySpeak("Hello Boss. Mark 85 nanotech systems are fully operational. I have initialized weapon and defensive layers.");
+            }, 700);
         }
 
-        // --- DRAWING FUNCTIONS (Optimized for Canvas) ---
+        // --- GRAPHICS PROCEDURAL NANOTECH ARMOR ---
         
+        function drawArmorPlates(ctx, lm, w, h, scale) {
+            ctx.save();
+            ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
+            ctx.lineWidth = 2;
+            ctx.fillStyle = 'rgba(0, 20, 30, 0.25)';
+
+            const shL = {x: lm[11].x * w, y: lm[11].y * h};
+            const shR = {x: lm[12].x * w, y: lm[12].y * h};
+            const hipL = {x: lm[23].x * w, y: lm[23].y * h};
+            const hipR = {x: lm[24].x * w, y: lm[24].y * h};
+            const chestX = (shL.x + shR.x) / 2;
+            const chestY = (shL.y + shR.y) / 2 + 30;
+
+            // 1. Sleek Upper Chest Armor Plates
+            ctx.beginPath();
+            ctx.moveTo(shL.x, shL.y); ctx.lineTo(chestX, chestY - 15);
+            ctx.lineTo(shR.x, shR.y); ctx.lineTo(shR.x - 20*scale, shR.y + 40*scale);
+            ctx.lineTo(chestX, chestY + 50*scale); ctx.lineTo(shL.x + 20*scale, shL.y + 40*scale);
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+
+            // 2. Abdominal Core Lining
+            ctx.beginPath();
+            ctx.moveTo(shL.x + 30*scale, shL.y + 50*scale); ctx.lineTo(shR.x - 30*scale, shR.y + 50*scale);
+            ctx.lineTo(hipR.x + 10*scale, hipR.y - 20*scale); ctx.lineTo(hipL.x - 10*scale, hipL.y - 20*scale);
+            ctx.closePath(); ctx.stroke();
+
+            // 3. Forearm Gauntlets (Elbow to Wrist)
+            if(lm[13].visibility > 0.5 && lm[15].visibility > 0.5) { // Left Arm
+                ctx.beginPath();
+                ctx.moveTo(lm[13].x*w - 10, lm[13].y*h); ctx.lineTo(lm[13].x*w + 10, lm[13].y*h);
+                ctx.lineTo(lm[15].x*w + 8, lm[15].y*h); ctx.lineTo(lm[15].x*w - 8, lm[15].y*h);
+                ctx.closePath(); ctx.fillStyle = 'rgba(0, 255, 255, 0.15)'; ctx.fill(); ctx.stroke();
+            }
+            if(lm[14].visibility > 0.5 && lm[14].visibility > 0.5) { // Right Arm
+                ctx.beginPath();
+                ctx.moveTo(lm[14].x*w - 10, lm[14].y*h); ctx.lineTo(lm[14].x*w + 10, lm[14].y*h);
+                ctx.lineTo(lm[16].x*w + 8, lm[16].y*h); ctx.lineTo(lm[16].x*w - 8, lm[16].y*h);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+            }
+
+            // 4. Futuristic Tactical Eye HUD Frame
+            if(lm[0].visibility > 0.7) {
+                const headX = lm[0].x * w; const headY = lm[0].y * h;
+                ctx.beginPath(); ctx.arc(headX, headY, 25 * scale, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)'; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
+                
+                // Target bounding brackets
+                ctx.strokeStyle = '#00ffff';
+                ctx.strokeRect(headX - 15*scale, headY - 15*scale, 30*scale, 30*scale);
+            }
+            ctx.restore();
+        }
+
         function drawArcReactor(x, y, size) {
             overlayCtx.beginPath();
             for (let i = 0; i < 6; i++) {
@@ -143,55 +230,54 @@
             }
             overlayCtx.closePath();
             overlayCtx.lineWidth = 3; overlayCtx.strokeStyle = '#00ffff'; overlayCtx.stroke();
-            overlayCtx.fillStyle = 'rgba(0, 255, 255, 0.1)'; overlayCtx.fill();
+            overlayCtx.fillStyle = 'rgba(0, 255, 255, 0.15)'; overlayCtx.fill();
             
             overlayCtx.beginPath(); overlayCtx.arc(x, y, size * 0.4, 0, Math.PI * 2);
             overlayCtx.fillStyle = '#fff'; overlayCtx.fill();
-            overlayCtx.shadowBlur = 20; overlayCtx.shadowColor = '#00ffff'; overlayCtx.stroke(); overlayCtx.shadowBlur = 0;
+            overlayCtx.shadowBlur = 25; overlayCtx.shadowColor = '#00ffff'; overlayCtx.stroke(); overlayCtx.shadowBlur = 0;
         }
 
         function drawRepulsor(x, y, size, isFiring) {
             overlayCtx.beginPath(); overlayCtx.arc(x, y, size, 0, Math.PI * 2);
             overlayCtx.strokeStyle = '#00ffff'; overlayCtx.lineWidth = 2; overlayCtx.stroke();
-            overlayCtx.beginPath(); overlayCtx.arc(x, y, isFiring ? size*0.8 : size*0.3, 0, Math.PI * 2);
+            overlayCtx.beginPath(); overlayCtx.arc(x, y, isFiring ? size*0.85 : size*0.3, 0, Math.PI * 2);
             overlayCtx.fillStyle = isFiring ? '#fff' : 'rgba(0, 255, 255, 0.4)'; 
-            if(isFiring) { overlayCtx.shadowBlur = 30; overlayCtx.shadowColor = '#00ffff'; }
+            if(isFiring) { overlayCtx.shadowBlur = 35; overlayCtx.shadowColor = '#00ffff'; }
             overlayCtx.fill(); overlayCtx.shadowBlur = 0;
         }
 
-        function drawBooster(x, y, size) {
-            // Dynamic Flame
-            const flicker = Math.random() * 20;
-            const gradient = overlayCtx.createLinearGradient(x, y, x, y + size * 3 + flicker);
-            gradient.addColorStop(0, '#fff'); gradient.addColorStop(0.2, '#00ffff'); gradient.addColorStop(1, 'transparent');
+        function drawFlightBooster(x, y, size) {
+            const flicker = Math.random() * 25;
+            const gradient = overlayCtx.createLinearGradient(x, y, x, y + size * 4 + flicker);
+            gradient.addColorStop(0, '#ffffff'); gradient.addColorStop(0.15, '#00ffff'); gradient.addColorStop(1, 'transparent');
             
             overlayCtx.beginPath();
             overlayCtx.moveTo(x - size, y); overlayCtx.lineTo(x + size, y);
-            overlayCtx.lineTo(x, y + size * 3 + flicker);
+            overlayCtx.lineTo(x, y + size * 4 + flicker);
             overlayCtx.fillStyle = gradient; overlayCtx.fill();
         }
 
         function drawShield(x, y, size) {
-            const gradient = overlayCtx.createRadialGradient(x, y, size*0.2, x, y, size);
-            gradient.addColorStop(0, 'rgba(0, 255, 255, 0.1)');
-            gradient.addColorStop(0.8, 'rgba(0, 255, 255, 0.4)');
+            const gradient = overlayCtx.createRadialGradient(x, y, size*0.1, x, y, size);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+            gradient.addColorStop(0.7, 'rgba(0, 255, 255, 0.45)');
             gradient.addColorStop(1, 'transparent');
             
             overlayCtx.beginPath(); overlayCtx.arc(x, y, size, 0, Math.PI * 2);
             overlayCtx.fillStyle = gradient; overlayCtx.fill();
             
-            // Hexagon grid effect inside shield
-            overlayCtx.strokeStyle = 'rgba(0, 255, 255, 0.2)'; overlayCtx.lineWidth = 1;
-            for(let i=0; i<3; i++) {
-                overlayCtx.beginPath(); overlayCtx.arc(x, y, size * (0.3 * (i+1)), 0, Math.PI * 2); overlayCtx.stroke();
+            // Tech-Hexagon Mapping inside shield
+            overlayCtx.strokeStyle = 'rgba(0, 255, 255, 0.3)'; overlayCtx.lineWidth = 1.5;
+            for(let i=0; i<4; i++) {
+                overlayCtx.beginPath(); overlayCtx.arc(x, y, size * (0.25 * (i+1)), 0, Math.PI * 2); overlayCtx.stroke();
             }
         }
 
-        // --- MEDIAPIPE AI LOOP ---
+        // --- MEDIAPIPE CORE COMPILATION LOOP ---
 
         function onResults(results) {
             ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = 'rgba(0, 5, 10, 0.7)'; ctx.fillRect(0, 0, canvas.width, canvas.height); // Dark Corporate Tint
+            ctx.fillStyle = 'rgba(0, 4, 8, 0.72)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
             overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
             if (results.poseLandmarks) {
@@ -200,7 +286,7 @@
 
                 if (!isSuitedUp && !isDetecting) {
                     isDetecting = true;
-                    document.querySelector('.sys-msg > div:last-child').innerText = "BODY ACQUIRED. INITIALIZING...";
+                    document.querySelector('.sys-msg > div:last-child').innerText = "LOCK ACQUIRED. PAIRING MATRIX...";
                     setTimeout(triggerSuitUp, 1500);
                 }
 
@@ -211,70 +297,98 @@
                     const lAnkle = lm[27], rAnkle = lm[28];
                     
                     const chestX = ((lShoulder.x + rShoulder.x) / 2) * w;
-                    const chestY = ((lShoulder.y + rShoulder.y) / 2) * h + 40;
-                    const scale = Math.max(0.5, Math.abs(lShoulder.x - rShoulder.x) * 2);
+                    const chestY = ((lShoulder.y + rShoulder.y) / 2) * h + 35;
+                    const scale = Math.max(0.4, Math.abs(lShoulder.x - rShoulder.x) * 2);
 
-                    // 1. Arc Reactor
-                    drawArcReactor(chestX, chestY, 30 * scale);
+                    // 1. Nanotech Suit Geometry Plates
+                    drawArmorPlates(overlayCtx, lm, w, h, scale);
 
-                    // 2. Shield Logic (Cross Wrists near chest)
+                    // 2. Arc Reactor Centerpiece
+                    drawArcReactor(chestX, chestY, 28 * scale);
+
+                    // 3. Shield Gestures & Voice Warnings
                     const wristDist = Math.abs(lWrist.x - rWrist.x);
-                    if (wristDist < 0.1 && lWrist.y > lShoulder.y && lWrist.y < lAnkle.y) {
-                        drawShield(chestX, chestY, 200 * scale);
-                        if(Math.random() > 0.9) playSound('shield');
+                    const shieldActive = (wristDist < 0.08 && lWrist.y > lShoulder.y && lWrist.y < lAnkle.y);
+                    if (shieldActive) {
+                        drawShield(chestX, chestY, 220 * scale);
+                        if (!lastShieldState) { fridaySpeak("Deploying hard light energy shield."); }
+                        if(Math.random() > 0.9) playFX('repulsor');
                     }
+                    lastShieldState = shieldActive;
 
-                    // 3. Repulsor Logic (Wrists above elbows)
-                    const lFire = lWrist.y < lElbow.y - 0.05;
-                    const rFire = rWrist.y < rElbow.y - 0.05;
-                    if (lWrist.visibility > 0.5) drawRepulsor(lWrist.x * w, lWrist.y * h, 20 * scale, lFire);
-                    if (rWrist.visibility > 0.5) drawRepulsor(rWrist.x * w, rWrist.y * h, 20 * scale, rFire);
-                    if ((lFire || rFire) && Math.random() > 0.8) playSound('repulsor');
-
-                    // 4. Flight Boosters (At ankles)
-                    if (lAnkle.visibility > 0.5) { drawBooster(lAnkle.x * w, lAnkle.y * h, 15 * scale); playSound('booster'); }
-                    if (rAnkle.visibility > 0.5) { drawBooster(rAnkle.x * w, rAnkle.y * h, 15 * scale); }
-
-                    // 5. Missile Logic (Touch left shoulder with right hand, or vice versa)
-                    const rHandToLShoulder = Math.hypot(rWrist.x - lShoulder.x, rWrist.y - lShoulder.y) < 0.1;
-                    const lHandToRShoulder = Math.hypot(lWrist.x - rShoulder.x, lWrist.y - rShoulder.y) < 0.1;
+                    // 4. Smart Repulsors (Fire triggers when wrist is higher than elbow)
+                    const lFire = lWrist.y < lElbow.y - 0.04;
+                    const rFire = rWrist.y < rElbow.y - 0.04;
                     
-                    if ((rHandToLShoulder || lHandToRShoulder) && missiles > 0 && Math.random() > 0.9) {
-                        activeMissiles.push({ x: (rHandToLShoulder ? lShoulder.x : rShoulder.x) * w, y: (rHandToLShoulder ? lShoulder.y : rShoulder.y) * h });
-                        missiles--; document.getElementById('missile-count').innerText = missiles;
-                        playSound('missile');
+                    if (lWrist.visibility > 0.5) drawRepulsor(lWrist.x * w, lWrist.y * h, 18 * scale, lFire);
+                    if (rWrist.visibility > 0.5) drawRepulsor(rWrist.x * w, rWrist.y * h, 18 * scale, rFire);
+                    
+                    if ((lFire || rFire) && !lastRepulsorState) {
+                        fridaySpeak("Repulsors fully charged. Discharging power.");
+                    }
+                    if ((lFire || rFire) && Math.random() > 0.8) playFX('repulsor');
+                    lastRepulsorState = (lFire || rFire);
+
+                    // 5. Twin Foot Plasma Flight Boosters
+                    let isFlying = false;
+                    if (lAnkle.visibility > 0.5) { drawFlightBooster(lAnkle.x * w, lAnkle.y * h, 14 * scale); isFlying = true; }
+                    if (rAnkle.visibility > 0.5) { drawFlightBooster(rAnkle.x * w, rAnkle.y * h, 14 * scale); isFlying = true; }
+                    if (isFlying && Math.random() > 0.93) playFX('booster');
+
+                    // 6. Micro-Missile Acquisition System (Touch shoulder to deploy)
+                    const rHandToLShoulder = Math.hypot(rWrist.x - lShoulder.x, rWrist.y - lShoulder.y) < 0.09;
+                    const lHandToRShoulder = Math.hypot(lWrist.x - rShoulder.x, lWrist.y - rShoulder.y) < 0.09;
+                    
+                    if ((rHandToLShoulder || lHandToRShoulder) && missiles > 0 && Math.random() > 0.94) {
+                        activeMissiles.push({ 
+                            x: (rHandToLShoulder ? lShoulder.x : rShoulder.x) * w, 
+                            y: (rHandToLShoulder ? lShoulder.y : rShoulder.y) * h 
+                        });
+                        missiles--; 
+                        document.getElementById('missile-count').innerText = missiles;
+                        playFX('missile');
+                        if (missiles % 3 === 0) fridaySpeak("Launching micro-missiles. Targets locked.");
                     }
                 }
             } else if (isSuitedUp) {
                 isSuitedUp = false; isDetecting = false;
                 document.getElementById('status-container').style.opacity = '1';
                 document.getElementById('main-hud').classList.remove('hud-visible');
+                fridaySpeak("Target lost. Putting systems on standby mode.");
             }
 
-            // Update & Draw Flying Missiles
+            // Real-time calculation and trajectory tracking for Missiles
             for (let i = activeMissiles.length - 1; i >= 0; i--) {
                 let m = activeMissiles[i];
-                m.y -= 15; // Move up fast
+                m.y -= 18; 
                 
-                overlayCtx.beginPath();
-                overlayCtx.arc(m.x, m.y, 4, 0, Math.PI*2);
-                overlayCtx.fillStyle = '#fff'; overlayCtx.fill();
+                overlayCtx.beginPath(); overlayCtx.arc(m.x, m.y, 4, 0, Math.PI*2);
+                overlayCtx.fillStyle = '#ffffff'; overlayCtx.fill();
                 
-                // Missile trail
-                overlayCtx.beginPath(); overlayCtx.moveTo(m.x, m.y); overlayCtx.lineTo(m.x, m.y + 30);
-                overlayCtx.strokeStyle = '#ffcc00'; overlayCtx.lineWidth = 2; overlayCtx.stroke();
+                overlayCtx.beginPath(); overlayCtx.moveTo(m.x, m.y); overlayCtx.lineTo(m.x, m.y + 25);
+                overlayCtx.strokeStyle = '#ff9900'; overlayCtx.lineWidth = 2.5; overlayCtx.stroke();
 
-                if (m.y < 0) activeMissiles.splice(i, 1); // Remove off-screen
+                if (m.y < 0) activeMissiles.splice(i, 1);
             }
         }
 
         const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
-        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.55, minTrackingConfidence: 0.55 });
         pose.onResults(onResults);
 
         const camera = new Camera(video, { onFrame: async () => { await pose.send({image: video}); }, width: 1280, height: 720 });
         camera.start();
 
+        // System Fluctuations
+        setInterval(() => {
+            if(isSuitedUp) {
+                const powerEl = document.getElementById('power-val');
+                let p = parseInt(powerEl.innerText);
+                if(Math.random() > 0.85) p = Math.max(94, p - 1);
+                else p = Math.min(100, p + 1);
+                powerEl.innerText = p;
+            }
+        }, 1200);
     </script>
 </body>
 </html>
