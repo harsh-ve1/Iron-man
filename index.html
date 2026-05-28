@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iron Man Mark 85 - Nanotech Weapon OS</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    
+    <style>
+        :root {
+            --stark-gold: #f1c40f;
+            --stark-red: #c0392b;
+            --jarvis-blue: #00d2ff;
+            --panel-glass: rgba(5, 12, 28, 0.85);
+            --border-glass: rgba(0, 210, 255, 0.15);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+        body { font-family: 'Segoe UI', Roboto, sans-serif; background-color: #010206; color: #fff; overflow: hidden; width: 100vw; height: 100vh; }
+        #viewport-container { position: relative; width: 100%; height: 100%; }
+        #webcam { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; }
+
+        /* JARVIS HUD System */
+        .jarvis-hud { position: absolute; top: 25px; left: 25px; z-index: 10; display: flex; flex-direction: column; gap: 12px; pointer-events: none; }
+        .hud-card { background: var(--panel-glass); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid var(--border-glass); border-radius: 8px; padding: 14px 20px; box-shadow: 0 0 25px rgba(0, 210, 255, 0.1); min-width: 260px; }
+        .hud-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 3px; color: rgba(0, 210, 255, 0.6); margin-bottom: 6px; font-weight: 800; }
+        .hud-data { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; letter-spacing: 1px; }
+        .hud-data .value { font-weight: 700; color: #fff; text-shadow: 0 0 5px var(--jarvis-blue); }
+
+        /* Interactive Arc Reactor Button (Floating Center-Bottom initially) */
+        #arc-reactor-trigger {
+            position: absolute;
+            top: 70%; left: 50%; transform: translate(-50%, -50%);
+            width: 110px; height: 110px;
+            background: radial-gradient(circle, #fff 20%, rgba(0,210,255,0.2) 50%, transparent 70%);
+            border: 3px dashed var(--jarvis-blue); border-radius: 50%;
+            z-index: 30; cursor: pointer;
+            box-shadow: 0 0 40px rgba(0, 210, 255, 0.6);
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex; align-items: center; justify-content: center;
+        }
+        #arc-reactor-trigger::before {
+            content: 'MARK 85'; font-size: 0.6rem; letter-spacing: 2px; font-weight: 900; color: var(--jarvis-blue); text-shadow: 0 0 5px #fff;
+        }
+        #arc-reactor-trigger.deployed {
+            top: 80px; left: calc(100% - 80px); width: 65px; height: 65px; border-style: solid;
+        }
+        #arc-reactor-trigger.deployed::before { content: 'ONLINE'; font-size: 0.45rem; }
+
+        /* Weapon Selection Panel */
+        #weapon-menu { 
+            position: absolute; bottom: 35px; left: 50%; transform: translateX(-50%); 
+            z-index: 20; display: flex; gap: 12px; padding: 10px; border-radius: 12px; 
+            pointer-events: auto; opacity: 0; transform: translate(-50%, 50px); transition: all 0.6s ease;
+        }
+        #weapon-menu.visible { opacity: 1; transform: translate(-50%, 0); }
+        
+        .btn-weapon { 
+            background: rgba(0, 210, 255, 0.03); border: 1px solid var(--border-glass); 
+            color: rgba(255, 255, 255, 0.6); padding: 12px 22px; border-radius: 4px; 
+            cursor: pointer; font-weight: 700; font-size: 0.75rem; letter-spacing: 2px; 
+            text-transform: uppercase; transition: all 0.3s ease; 
+        }
+        .btn-weapon:hover { background: rgba(0, 210, 255, 0.1); color: #fff; }
+        .btn-weapon.active { 
+            color: #fff; border-color: var(--stark-gold); 
+            background: rgba(241, 196, 15, 0.15); text-shadow: 0 0 8px var(--stark-gold); 
+            box-shadow: 0 0 15px rgba(241, 196, 15, 0.2);
+        }
+
+        /* Initial Sync Overlay */
+        #gateway-overlay { position: absolute; inset: 0; background: radial-gradient(circle at center, #07132c 0%, #010206 100%); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: opacity 0.5s ease; }
+        .void-title { font-size: 2.5rem; font-weight: 200; letter-spacing: 12px; margin-bottom: 5px; color: #ffffff; text-shadow: 0 0 20px rgba(0, 210, 255, 0.4); }
+        .sync-btn { padding: 18px 48px; font-size: 0.85rem; font-weight: 800; color: #fff; background: linear-gradient(45deg, #0055ff, #00d2ff); border: none; border-radius: 4px; cursor: pointer; letter-spacing: 3px; text-transform: uppercase; box-shadow: 0 0 30px rgba(0, 210, 255, 0.3); }
+        .hidden { opacity: 0; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <div id="viewport-container">
+        <div id="gateway-overlay">
+            <h1 class="void-title">STARK INDUSTRIES</h1>
+            <p style="color: #3b4e70; margin-bottom: 40px; font-size: 0.8rem; letter-spacing: 4px; text-transform: uppercase;">Armor Tactical OS v85.2</p>
+            <button class="sync-btn" id="syncBtn">Connect Jarvis</button>
+        </div>
+
+        <video id="webcam" autoplay playsinline></video>
+        <canvas id="renderCanvas"></canvas>
+
+        <div id="arc-reactor-trigger"></div>
+
+        <div class="jarvis-hud">
+            <div class="hud-card">
+                <div class="hud-title">System Architecture</div>
+                <div class="hud-data"><span class="label" style="color:rgba(255,255,255,0.4)">Armor Status</span><span class="value" id="hud-suit-state" style="color: red;">STANDBY</span></div>
+            </div>
+            <div class="hud-card">
+                <div class="hud-title">Helmet Interface</div>
+                <div class="hud-data"><span class="label" style="color:rgba(255,255,255,0.4)">Face Shield</span><span class="value" id="hud-helmet-state">SEALED</span></div>
+            </div>
+            <div class="hud-card">
+                <div class="hud-title">Active Nanotech Payload</div>
+                <div class="hud-data"><span class="label" style="color:rgba(255,255,255,0.4)">Weapon Call</span><span class="value" id="hud-weapon-state" style="color: var(--jarvis-blue);">NONE</span></div>
+            </div>
+        </div>
+
+        <div id="weapon-menu" class="hud-card">
+            <button class="btn-weapon active" data-weapon="repulsor">REPULSOR</button>
+            <button class="btn-weapon" data-weapon="laser">LASER BEAM</button>
+            <button class="btn-weapon" data-weapon="missile">MISSILES</button>
+            <button class="btn-weapon" data-weapon="shield">NANO SHIELD</button>
+        </div>
+    </div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const canvas = document.getElementById('renderCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let width, height;
+        let isSuitDeployed = false;
+        let isHelmetOpen = false;
+        let selectedWeapon = 'repulsor';
+        
+        // Trackers Data Cache
+        let handLandmarksData = null;
+        let faceLandmarksData = null;
+        let blastwaves = [];
+        let particles = [];
+        let missileCharge = 0;
+
+        function resize() {
+            width = window.innerWidth; height = window.innerHeight;
+            canvas.width = width; canvas.height = height;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Weapon Selector Handlers
+        document.querySelectorAll('.btn-weapon').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.btn-weapon').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                selectedWeapon = e.target.getAttribute('data-weapon');
+                document.getElementById('hud-weapon-state').innerText = selectedWeapon.toUpperCase();
+            });
+        });
+
+        // Click Event Listener on Canvas to check for Interactive Objects (Arc Reactor / Helmet Click)
+        canvas.addEventListener('click', (e) => {
+            let clickX = e.clientX;
+            let clickY = e.clientY;
+
+            if (isSuitDeployed && faceLandmarksData) {
+                // Check if user clicked on their head region (Helmet Toggle area)
+                let noseBridge = faceLandmarksData[6]; // Nose bridge coordinate anchor
+                let hX = (1 - noseBridge.x) * width;
+                let hY = noseBridge.y * height;
+                let distToFace = Math.hypot(clickX - hX, clickY - hY);
+
+                if (distToFace < 160) {
+                    isHelmetOpen = !isHelmetOpen;
+                    document.getElementById('hud-helmet-state').innerText = isHelmetOpen ? "OPEN (FACE HUD)" : "SEALED";
+                    document.getElementById('hud-helmet-state').style.color = isHelmetOpen ? "var(--stark-gold)" : "#fff";
+                    return;
+                }
+            }
+        });
+
+        // Center Arc Reactor Click Logic
+        document.getElementById('arc-reactor-trigger').addEventListener('click', () => {
+            if (!isSuitDeployed) {
+                isSuitDeployed = true;
+                document.getElementById('arc-reactor-trigger').classList.add('deployed');
+                document.getElementById('weapon-menu').classList.add('visible');
+                document.getElementById('hud-suit-state').innerText = "MARK 85 ONLINE";
+                document.getElementById('hud-suit-state').style.color = "#00ffaa";
+            } else {
+                // Click to toggle off armor completely
+                isSuitDeployed = false;
+                isHelmetOpen = false;
+                document.getElementById('arc-reactor-trigger').classList.remove('deployed');
+                document.getElementById('weapon-menu').classList.remove('visible');
+                document.getElementById('hud-suit-state').innerText = "STANDBY";
+                document.getElementById('hud-suit-state').style.color = "red";
+            }
+        });
+
+        document.getElementById('syncBtn').addEventListener('click', () => {
+            document.getElementById('gateway-overlay').classList.add('hidden');
+            startStarkOS();
+        });
+
+        function addSpark(x, y, color, vx, vy) {
+            particles.push({ x, y, vx, vy, alpha: 1, size: Math.random() * 3 + 1.5, color });
+        }
+
+        // DYNAMIC MAIN COMPUTATION LOOP
+        function drawFramePipeline() {
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw Webcam Feed Background
+            ctx.save(); ctx.translate(width, 0); ctx.scale(-1, 1);
+            ctx.filter = "brightness(0.55) contrast(1.1)";
+            ctx.drawImage(video, 0, 0, width, height);
+            ctx.restore();
+
+            // 1. FACE MESH RENDER PIPELINE (Iron Man Helmet Overlay)
+            if (isSuitDeployed && faceLandmarksData) {
+                // Calculate essential facial structure anchors
+                let leftEye = faceLandmarksData[33];
+                let rightEye = faceLandmarksData[263];
+                let chin = faceLandmarksData[152];
+                let forehead = faceLandmarksData[10];
+
+                let fX = (1 - faceLandmarksData[6].x) * width;
+                let fY = faceLandmarksData[6].y * height;
+                let faceWidth = Math.hypot((1-leftEye.x)*width - (1-rightEye.x)*width, leftEye.y*height - rightEye.y*height) * 2.2;
+                let faceHeight = Math.hypot(forehead.x*width - chin.x*width, forehead.y*height - chin.y*height) * 1.3;
+
+                ctx.save();
+                if (!isHelmetOpen) {
+                    // Draw Sealed Crimson Red & Metallic Gold Helmet Face Shield Overlay
+                    ctx.fillStyle = "rgba(192, 57, 43, 0.95)";
+                    ctx.strokeStyle = "var(--stark-gold)";
+                    ctx.lineWidth = 4;
+                    ctx.shadowBlur = 20; ctx.shadowColor = "rgba(192, 57, 43, 0.5)";
+                    
+                    // Draw procedural mechanical helmet contours mapped onto face mesh landmarks
+                    ctx.beginPath();
+                    ctx.arc(fX, fY - 10, faceWidth * 0.5, 0, Math.PI * 2);
+                    ctx.fill(); ctx.stroke();
+
+                    // Glowing Arc Cybernetic Blue Eyes Slot
+                    ctx.fillStyle = "#fff"; ctx.shadowColor = "var(--jarvis-blue)"; ctx.shadowBlur = 15;
+                    let lX = (1 - leftEye.x) * width; let lY = leftEye.y * height;
+                    let rX = (1 - rightEye.x) * width; let rY = rightEye.y * height;
+                    ctx.fillRect(lX - 25, lY - 6, 40, 8);
+                    ctx.fillRect(rX - 15, rY - 6, 40, 8);
+                } else {
+                    // Draw Open Helmet Framework borders around the user face
+                    ctx.strokeStyle = "rgba(192, 57, 43, 0.8)"; ctx.lineWidth = 6;
+                    ctx.strokeRect(fX - (faceWidth*0.55), fY - (faceHeight*0.55), faceWidth * 1.1, faceHeight * 1.1);
+                    
+                    // Add holographic face tracking targeting overlay metrics
+                    ctx.strokeStyle = "rgba(0, 210, 255, 0.4)"; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.arc(fX, fY, faceWidth * 0.4, 0, Math.PI*2); ctx.stroke();
+                    ctx.fillStyle = "rgba(0,210,255,0.7)"; font = "10px monospace";
+                    ctx.fillText("TARGET LOCK: TONY STARK", fX - 60, fY - faceHeight*0.4);
+                }
+                ctx.restore();
+            }
+
+            // 2. HAND LANDMARKS WEAPON MATRIX RENDER PIPELINE
+            if (isSuitDeployed && handLandmarksData) {
+                let wrist = handLandmarksData[0];
+                let indexTip = handLandmarksData[8];
+                let pinkyTip = handLandmarksData[20];
+                let thumbTip = handLandmarksData[4];
+
+                let wX = (1 - wrist.x) * width; let wY = wrist.y * height;
+                let iX = (1 - indexTip.x) * width; let iY = indexTip.y * height;
+
+                // Read posture state to trigger blasts
+                let handSpan = Math.hypot(indexTip.x - pinkyTip.x, indexTip.y - pinkyTip.y);
+                let isOpenPalm = handSpan > 0.25;
+                let isPinching = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y) < 0.04;
+
+                if (selectedWeapon === 'repulsor') {
+                    // Palm center energy core configuration
+                    let pX = (wX + iX) / 2; let pY = (wY + iY) / 2;
+                    let repulsorSize = isOpenPalm ? 50 : 25;
+                    let coreGrad = ctx.createRadialGradient(pX, pY, 2, pX, pY, repulsorSize);
+                    coreGrad.addColorStop(0, '#fff'); coreGrad.addColorStop(0.3, 'rgba(0,210,255,1)'); coreGrad.addColorStop(1, 'transparent');
+                    
+                    ctx.save(); ctx.shadowBlur = 30; ctx.shadowColor = "var(--jarvis-blue)";
+                    ctx.fillStyle = coreGrad; ctx.beginPath(); ctx.arc(pX, pY, repulsorSize, 0, Math.PI*2); ctx.fill(); ctx.restore();
+
+                    if (isOpenPalm && Math.random() > 0.7) {
+                        blastwaves.push({ x: pX, y: pY, radius: 10, maxRadius: 280, color: "var(--jarvis-blue)", opacity: 1 });
+                    }
+                } 
+                else if (selectedWeapon === 'laser') {
+                    // Continuous cutting edge particle laser stream out of hand fingertips
+                    ctx.save(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 8;
+                    ctx.shadowBlur = 25; ctx.shadowColor = "red";
+                    ctx.beginPath(); ctx.moveTo(iX, iY); ctx.lineTo(iX, 0); ctx.stroke(); ctx.restore();
+
+                    for(let l=0; l<3; l++) addSpark(iX, iY - Math.random()*20, 'red', (Math.random()-0.5)*4, -5);
+                } 
+                else if (selectedWeapon === 'missile') {
+                    // Nanotech micro-missile arrays logic
+                    if (isPinching) {
+                        missileCharge = Math.min(missileCharge + 2, 100);
+                    } else {
+                        if (missileCharge > 30) {
+                            // Fire barrage projectile sparks upward!
+                            for (let m = 0; m < 8; m++) {
+                                addSpark(iX, iY, "var(--stark-gold)", (Math.random()-0.5)*12, -8 - Math.random()*8);
+                            }
+                            blastwaves.push({ x: iX, y: iY, radius: 5, maxRadius: 120, color: "var(--stark-gold)", opacity: 1 });
+                        }
+                        missileCharge = 0;
+                    }
+                    ctx.fillStyle = "var(--stark-gold)";
+                    ctx.fillRect(iX - 20, iY - 35, 40, 8);
+                    ctx.fillStyle = "#fff"; ctx.font = "9px sans-serif";
+                    ctx.fillText("MISSILE LOCK: " + Math.round(missileCharge) + "%", iX - 35, iY - 45);
+                } 
+                else if (selectedWeapon === 'shield') {
+                    // Mapped glowing hexagonal nano defensive shield array
+                    ctx.save(); ctx.strokeStyle = "rgba(0, 210, 255, 0.7)"; ctx.lineWidth = 3;
+                    ctx.fillStyle = "rgba(0, 210, 255, 0.15)"; ctx.shadowBlur = 20; ctx.shadowColor = "var(--jarvis-blue)";
+                    ctx.beginPath();
+                    for(let s=0; s<6; s++) {
+                        let rad = (Math.PI / 3) * s;
+                        let sX = iX + Math.cos(rad) * 90; let sY = iY + Math.sin(rad) * 90;
+                        if(s===0) ctx.moveTo(sX, sY); else ctx.lineTo(sX, sY);
+                    }
+                    ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+                }
+            }
+
+            // 3. ANIMATE AND RENDER BLASTWAVES PIPELINE
+            for (let b = blastwaves.length - 1; b >= 0; b--) {
+                let bl = blastwaves[b]; bl.radius += 14; bl.opacity -= 0.04;
+                if (bl.opacity <= 0) { blastwaves.splice(b, 1); } 
+                else {
+                    ctx.save(); ctx.globalAlpha = bl.opacity; ctx.strokeStyle = bl.color; ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.arc(bl.x, bl.y, bl.radius, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+                }
+            }
+
+            // 4. ANIMATE AND RENDER PROJECTILE SPARKS VECTOR PIPELINE
+            for (let p = particles.length - 1; p >= 0; p--) {
+                let pt = particles[p]; pt.x += pt.vx; pt.y += pt.vy; pt.alpha -= 0.03;
+                if (pt.alpha <= 0) { particles.splice(p, 1); } 
+                else {
+                    ctx.save(); ctx.globalAlpha = pt.alpha; ctx.fillStyle = pt.color;
+                    ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill(); ctx.restore();
+                }
+            }
+
+            requestAnimationFrame(drawFramePipeline);
+        }
+
+        // INITIALIZE SIMULTANEOUS MULTI-TRACKING CHANNELS
+        function startStarkOS() {
+            // Setup Hands Infrastructure Channel
+            const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
+            hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+            hands.onResults(results => { handLandmarksData = (results.multiHandLandmarks) ? results.multiHandLandmarks[0] : null; });
+
+            // Setup Face Mesh Infrastructure Channel
+            const faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
+            faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: false, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+            faceMesh.onResults(results => { faceLandmarksData = (results.multiFaceLandmarks) ? results.multiFaceLandmarks[0] : null; });
+
+            const camera = new Camera(video, {
+                onFrame: async () => {
+                    await hands.send({ image: video });
+                    await faceMesh.send({ image: video });
+                },
+                width: 1280, height: 720
+            });
+            camera.start();
+            requestAnimationFrame(drawFramePipeline);
+        }
+    </script>
+</body>
+</html>
