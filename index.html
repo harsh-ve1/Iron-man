@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -72,6 +72,7 @@
     <div class="grid-bg"></div>
     <div id="flash" class="flash-overlay"></div>
     <div id="scan-line" class="scan-line"></div>
+    <div id="fx-layer" class="fixed inset-0 pointer-events-none z-[55]"></div>
     
     <div id="center-reticle" class="reticle">
         <div class="reticle-inner theme-border"></div>
@@ -156,10 +157,13 @@
         const overlayCanvas = document.querySelector('.overlay_canvas');
         const overlayCtx = overlayCanvas.getContext('2d');
         
+        const MAX_MISSILES = 24;
         let isSuitedUp = false;
         let isDetecting = false;
-        let missiles = 24;
+        let missiles = MAX_MISSILES;
         let activeMissiles = [];
+        let particles = [];
+        let ripples = [];
         let lastShieldState = false;
         let lastRepulsorState = false;
         let lastFlightState = false;
@@ -167,11 +171,12 @@
         let powerCore = 100;
         let isThermal = false;
         let hudColor = '#00ffff';
-        
+
         let recognition;
         let isFridaySpeaking = false;
+        let speechQueue = [];
 
-        function addLog(msg) {
+function addLog(msg) {
             const feed = document.getElementById('log-feed');
             const log = document.createElement('div');
             log.innerText = `[${new Date().toLocaleTimeString().split(' ')[0]}] ${msg}`;
@@ -184,13 +189,167 @@
         const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
         function sanitizeEnglishResponse(text) {
-        if (!text) return "";
-        return text
-            .replace(/Boss/gi, "Boss")
-            .replace(/Sir/gi, "Sir")
-            .replace(/Friday/gi, "Friday")
-            .trim();
-    }
+            if (!text) return "";
+            return String(text)
+                .replace(/\s+/g, " ")
+                .replace(/^[\"'`]+|[\"'`]+$/g, "")
+                .trim();
+        }
+
+        function normalizeCommand(raw) {
+            return String(raw || "")
+                .toLowerCase()
+                .replace(/[^a-z0-9\s]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+        }
+
+        function containsAny(text, phrases) {
+            return phrases.some(p => text.includes(p));
+        }
+
+        function syncMissileUI() {
+            document.getElementById('missile-count').innerText = missiles;
+        }
+
+        function setWeaponStatus(text, danger = false) {
+            const el = document.getElementById('weapon-status');
+            el.innerText = text;
+            el.className = danger
+                ? "text-[9px] text-rose-500 tracking-widest mt-1.5 uppercase font-mono animate-pulse"
+                : "text-[9px] text-cyan-400 tracking-widest mt-1.5 uppercase font-mono";
+        }
+
+        function spawnParticles(x, y, count = 12, palette = ['#00ffff', '#ffffff']) {
+            for (let i = 0; i < count; i++) {
+                if (particles.length > 180) particles.shift();
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 0.6 + Math.random() * 2.4;
+                particles.push({
+                    x, y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    life: 30 + Math.random() * 18,
+                    maxLife: 30 + Math.random() * 18,
+                    size: 1.5 + Math.random() * 2.5,
+                    color: palette[Math.floor(Math.random() * palette.length)]
+                });
+            }
+        }
+
+        function spawnRipple(x, y, color = '#00ffff') {
+            ripples.push({ x, y, radius: 0, maxRadius: 170, alpha: 0.8, color });
+            if (ripples.length > 18) ripples.shift();
+        }
+
+        function triggerFxLabel(text, color = '#00ffff') {
+            const layer = document.getElementById('fx-layer');
+            if (!layer) return;
+
+            const tag = document.createElement('div');
+            tag.className = 'absolute px-3 py-1 rounded-full text-[10px] font-black tracking-[0.35em] uppercase border backdrop-blur-md';
+            tag.style.left = '50%';
+            tag.style.top = '15%';
+            tag.style.transform = 'translate(-50%, 0)';
+            tag.style.color = color;
+            tag.style.borderColor = color;
+            tag.style.background = 'rgba(0,0,0,0.45)';
+            tag.style.boxShadow = `0 0 20px ${color}55`;
+            tag.textContent = text;
+            layer.appendChild(tag);
+            setTimeout(() => {
+                tag.style.transition = 'opacity 220ms ease, transform 220ms ease';
+                tag.style.opacity = '0';
+                tag.style.transform = 'translate(-50%, -10px)';
+                setTimeout(() => tag.remove(), 240);
+            }, 700);
+        }
+
+        function flashCenterPulse(color = '#00ffff') {
+            const layer = document.getElementById('fx-layer');
+            if (!layer) return;
+            const pulse = document.createElement('div');
+            pulse.className = 'absolute left-1/2 top-1/2 rounded-full border';
+            pulse.style.width = '16px';
+            pulse.style.height = '16px';
+            pulse.style.transform = 'translate(-50%, -50%) scale(1)';
+            pulse.style.borderColor = color;
+            pulse.style.boxShadow = `0 0 35px ${color}88`;
+            pulse.style.opacity = '0.95';
+            layer.appendChild(pulse);
+
+            const start = performance.now();
+            const tick = (now) => {
+                const t = Math.min(1, (now - start) / 450);
+                const scale = 1 + t * 10;
+                pulse.style.transform = `translate(-50%, -50%) scale(${scale})`;
+                pulse.style.opacity = String(0.95 * (1 - t));
+                if (t < 1) requestAnimationFrame(tick);
+                else pulse.remove();
+            };
+            requestAnimationFrame(tick);
+        }
+
+        function renderVisualEffects() {
+            overlayCtx.save();
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vx *= 0.985;
+                p.vy *= 0.985;
+                p.life -= 1;
+
+                const alpha = Math.max(0, p.life / p.maxLife);
+                overlayCtx.globalAlpha = alpha;
+                overlayCtx.beginPath();
+                overlayCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                overlayCtx.fillStyle = p.color;
+                overlayCtx.shadowBlur = 18;
+                overlayCtx.shadowColor = p.color;
+                overlayCtx.fill();
+
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+
+            for (let i = ripples.length - 1; i >= 0; i--) {
+                const r = ripples[i];
+                r.radius += 5.5;
+                r.alpha *= 0.965;
+                overlayCtx.globalAlpha = r.alpha;
+                overlayCtx.beginPath();
+                overlayCtx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
+                overlayCtx.lineWidth = 2;
+                overlayCtx.strokeStyle = r.color;
+                overlayCtx.shadowBlur = 22;
+                overlayCtx.shadowColor = r.color;
+                overlayCtx.stroke();
+
+                if (r.radius > r.maxRadius || r.alpha < 0.03) ripples.splice(i, 1);
+            }
+
+            overlayCtx.restore();
+            overlayCtx.globalAlpha = 1;
+        }
+
+        function refillMissiles(announce = true) {
+            missiles = MAX_MISSILES;
+            syncMissileUI();
+            setWeaponStatus('ORDNANCE STACK READY', false);
+
+            const panel = document.getElementById('weapon-panel');
+            const rect = panel.getBoundingClientRect();
+            const cx = rect.left + rect.width / 2;
+            const cy = rect.top + rect.height / 2;
+            spawnParticles(cx, cy, 30, ['#ffffff', '#00ffff', '#7dd3fc']);
+            spawnRipple(cx, cy, '#00ffff');
+            triggerFxLabel('MISSILES RELOADED', '#00ffff');
+
+            if (announce) {
+                fridaySpeak("Missile bay reloaded. Full ordnance capacity restored.");
+            }
+        }
 
         async function askGeminiEnglish(userText) {
             const prompt = `
@@ -233,46 +392,6 @@ ${userText}
             }
         }
 
-        // --- BILINGUAL TEXT TO SPEECH ENGINE (HINDI + ENGLISH) ---
-        function fridaySpeak(text) {
-            document.getElementById('friday-speech-text').innerText = `"${text}"`;
-            addLog(`FRIDAY: ${text}`);
-            
-            if ('speechSynthesis' in window) {
-                isFridaySpeaking = true;
-                updateVoiceIndicator("SPEAKING", "bg-amber-400");
-                if (recognition) try { recognition.stop(); } catch(e) {}
-
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                
-                utterance.rate = 1.1; 
-                utterance.pitch = 1.05; 
-                
-                // Identify Language Strategy
-                const isHindi = /[\u0900-\u097F]/.test(text) || text.includes("hai") || text.includes("hoon") || text.includes("sir") || text.includes("kijiye");
-                const voices = window.speechSynthesis.getVoices();
-                
-                let preferredVoice;
-                if (isHindi) {
-                    preferredVoice = voices.find(v => v.lang.includes('hi-IN') || v.name.toLowerCase().includes('hindi'));
-                } else {
-                    preferredVoice = voices.find(v => v.name.toLowerCase().includes('google us english') || v.name.toLowerCase().includes('zira'));
-                }
-                
-                if (preferredVoice) utterance.voice = preferredVoice;
-                
-                utterance.onend = () => {
-                    isFridaySpeaking = false;
-                    updateVoiceIndicator("LISTENING", "bg-emerald-400");
-                    if (isSuitedUp && recognition) {
-                        try { recognition.start(); } catch(e) {}
-                    }
-                };
-                window.speechSynthesis.speak(utterance);
-            }
-        }
-
         function updateVoiceIndicator(status, colorClass) {
             const ind = document.getElementById('voice-indicator');
             const dot = document.getElementById('friday-dot');
@@ -282,30 +401,98 @@ ${userText}
             ping.className = `w-2.5 h-2.5 rounded-full ${colorClass} animate-ping absolute`;
         }
 
+        function startRecognitionSafe(delay = 120) {
+            if (!recognition || !isSuitedUp || isFridaySpeaking) return;
+            setTimeout(() => {
+                if (!recognition || !isSuitedUp || isFridaySpeaking) return;
+                try { recognition.start(); } catch (e) {}
+            }, delay);
+        }
+
+        function fridaySpeak(text, interrupt = false) {
+            const output = String(text || "").trim();
+            if (!output) return;
+
+            document.getElementById('friday-speech-text').innerText = `"${output}"`;
+            addLog(`FRIDAY: ${output}`);
+
+            if (!('speechSynthesis' in window)) return;
+
+            if (isFridaySpeaking && !interrupt) {
+                speechQueue.push(output);
+                return;
+            }
+
+            isFridaySpeaking = true;
+            updateVoiceIndicator("SPEAKING", "bg-amber-400");
+            if (recognition) try { recognition.stop(); } catch(e) {}
+
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(output);
+            utterance.rate = 1.05;
+            utterance.pitch = 1.0;
+            utterance.lang = 'en-US';
+
+            const voices = window.speechSynthesis.getVoices();
+            const preferredVoice = voices.find(v =>
+                /en/i.test(v.lang) &&
+                (v.lang.includes('en-US') || v.lang.includes('en-GB') || /google|microsoft|zira|samantha/i.test(v.name))
+            ) || voices.find(v => /en/i.test(v.lang));
+
+            if (preferredVoice) utterance.voice = preferredVoice;
+
+            utterance.onend = () => {
+                isFridaySpeaking = false;
+                updateVoiceIndicator("LISTENING", "bg-emerald-400");
+                if (speechQueue.length) {
+                    const next = speechQueue.shift();
+                    fridaySpeak(next, true);
+                    return;
+                }
+                startRecognitionSafe(100);
+            };
+
+            utterance.onerror = () => {
+                isFridaySpeaking = false;
+                updateVoiceIndicator("LISTENING", "bg-emerald-400");
+                startRecognitionSafe(150);
+            };
+
+            window.speechSynthesis.speak(utterance);
+        }
+
         // --- SPEECH INPUT CONFIGURATION ---
         function initVoiceRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) return;
 
             recognition = new SpeechRecognition();
-            recognition.continuous = false;
+            recognition.continuous = true;
             recognition.interimResults = false;
-            recognition.lang = 'en-US'; // English-only mode
+            recognition.maxAlternatives = 3;
+            recognition.lang = 'en-IN';
 
             recognition.onstart = () => {
-                if(!isFridaySpeaking) updateVoiceIndicator("LISTENING", "bg-emerald-400");
+                if (!isFridaySpeaking) updateVoiceIndicator("LISTENING", "bg-emerald-400");
             };
 
             recognition.onend = () => {
                 if (isSuitedUp && !isFridaySpeaking) {
-                    try { recognition.start(); } catch(e) {}
-                } else if(!isSuitedUp) {
+                    startRecognitionSafe(80);
+                } else if (!isSuitedUp) {
                     updateVoiceIndicator("STDBY", "bg-cyan-500");
                 }
             };
 
+            recognition.onerror = () => {
+                if (isSuitedUp && !isFridaySpeaking) {
+                    startRecognitionSafe(180);
+                }
+            };
+
             recognition.onresult = (event) => {
-                const command = event.results[0][0].transcript.toLowerCase().trim();
+                const transcript = event.results?.[0]?.[0]?.transcript || '';
+                const command = normalizeCommand(transcript);
                 document.getElementById('user-speech-text').innerText = `> "${command.toUpperCase()}"`;
                 processBilingualComms(command);
             };
@@ -313,83 +500,106 @@ ${userText}
 
         // --- ADVANCED COGNITIVE DISPATCHER ---
         async function processBilingualComms(cmd) {
-        let reply = "";
-        let handledLocally = false;
+            const command = normalizeCommand(cmd);
+            if (!command) return;
 
-        // Feature 3: Health/Biometric Scan
-        if (cmd.includes('scan') || cmd.includes('health') || cmd.includes('biometric')) {
-            document.getElementById('scan-line').classList.add('scan-active');
-            playFX('suit');
-            setTimeout(() => document.getElementById('scan-line').classList.remove('scan-active'), 2500);
-            reply = "Verma Health Scan has started. Your vitals are stable. Heart rate and core temperature are normal, Boss.";
-            handledLocally = true;
-        }
-        // Feature 2: Unibeam voice prep
-        else if (cmd.includes('unibeam') || cmd.includes('blast')) {
-            reply = "Unibeam routing is ready. Cross both hands on your chest to fire, Sir.";
-            handledLocally = true;
-        }
-        // Status Query
-        else if (cmd.includes('status') || cmd.includes('report') || cmd.includes('suit status')) {
-            reply = `All systems are green, Boss. Matrix core power is at ${Math.floor(powerCore)} percent.`;
-            handledLocally = true;
-        }
-        else if (cmd.includes('how are you') || cmd.includes('how is friday')) {
-            reply = "I am doing well, Boss. The Verma Group advanced tech program is fully active.";
-            handledLocally = true;
-        }
-        else if (cmd.includes('hello') || cmd.includes('friday') || cmd.includes('listen')) {
-            reply = "Online and ready, Sir. Systems are stable.";
-            handledLocally = true;
-        }
-        // Power Grid Operations
-        else if (cmd.includes('charge') || cmd.includes('power up')) {
-            powerCore = 100;
-            document.getElementById('power-val').innerText = powerCore;
-            reply = "Nanotech energy array is fully optimized. Power grid is at 100 percent.";
-            handledLocally = true;
-        }
-        else if (cmd.includes('stealth mode')) {
-            changeHUDTheme('#a855f7');
-            reply = "Stealth configuration loaded. Visual signatures minimized.";
-            handledLocally = true;
-        }
-        else if (cmd.includes('danger') || cmd.includes('red')) {
-            changeHUDTheme('#ef4444');
-            reply = "Tactical combat configuration engaged.";
-            handledLocally = true;
-        }
-        else if (cmd.includes('normal') || cmd.includes('cyan')) {
-            changeHUDTheme('#00ffff');
-            reply = "Standard tactical blueprint restored.";
-            handledLocally = true;
-        }
-        else if (cmd.includes('thermal') || cmd.includes('night vision')) {
-            isThermal = !isThermal;
-            if(isThermal) {
-                canvas.classList.add('thermal-mode');
-                reply = "Infrared spectral grid activated.";
-            } else {
-                canvas.classList.remove('thermal-mode');
-                reply = "Standard optical mode has been restored.";
+            let reply = "";
+            let handledLocally = false;
+
+            triggerFxLabel("COMMAND ACCEPTED", hudColor);
+            flashCenterPulse(hudColor);
+            spawnRipple(window.innerWidth / 2, window.innerHeight / 2, hudColor);
+            spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 10, [hudColor, '#ffffff']);
+
+            if (containsAny(command, ['refill missile', 'refill missiles', 'reload missile', 'reload missiles', 'rearm missile', 'rearm missiles', 'missile refill', 'replenish missiles', 'reload ordnance', 'ordnance reload'])) {
+                refillMissiles(true);
+                reply = "Missiles refilled and ordnance stack is ready.";
+                handledLocally = true;
             }
-            handledLocally = true;
+            else if (containsAny(command, ['scan', 'health', 'biometric', 'diagnostic', 'vitals', 'full scan'])) {
+                document.getElementById('scan-line').classList.add('scan-active');
+                playFX('suit');
+                spawnRipple(window.innerWidth / 2, window.innerHeight / 2, '#00ffff');
+                setTimeout(() => document.getElementById('scan-line').classList.remove('scan-active'), 2500);
+                reply = "Health scan started. Your vitals are stable, and the core temperature is within safe range.";
+                handledLocally = true;
+            }
+            else if (containsAny(command, ['unibeam', 'beam', 'blast', 'fire beam'])) {
+                reply = "Unibeam routing is ready. Cross both hands on your chest to fire.";
+                handledLocally = true;
+            }
+            else if (containsAny(command, ['status report', 'status', 'report', 'suit status', 'system status'])) {
+                reply = `All systems are green, Boss. Matrix core power is at ${Math.floor(powerCore)} percent and missile count is ${missiles}.`;
+                handledLocally = true;
+            }
+            else if (containsAny(command, ['how are you', 'how is friday', 'friday status'])) {
+                reply = "I am doing well, Boss. The advanced suit stack is fully active.";
+                handledLocally = true;
+            }
+            else if (containsAny(command, ['hello', 'hi friday', 'friday', 'listen', 'wake up'])) {
+                reply = "Online and ready, Sir. Systems are stable.";
+                handledLocally = true;
+            }
+            else if (containsAny(command, ['charge', 'power up', 'full power', 'boost power'])) {
+                powerCore = 100;
+                document.getElementById('power-val').innerText = powerCore;
+                spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 24, ['#00ffff', '#ffffff']);
+                reply = "Nanotech energy array is fully optimized. Power grid is at 100 percent.";
+                handledLocally = true;
+            }
+            else if (containsAny(command, ['stealth mode', 'silent mode', 'ghost mode'])) {
+                changeHUDTheme('#a855f7');
+                triggerFxLabel('STEALTH ONLINE', '#a855f7');
+                reply = "Stealth configuration loaded. Visual signatures minimized.";
+                handledLocally = true;
+            }
+            else if (containsAny(command, ['combat mode', 'danger', 'red alert'])) {
+                changeHUDTheme('#ef4444');
+                triggerFxLabel('COMBAT READY', '#ef4444');
+                reply = "Combat configuration engaged.";
+                handledLocally = true;
+            }
+            else if (containsAny(command, ['normal mode', 'cyan mode', 'restore color', 'restore system', 'normal'])) {
+                changeHUDTheme('#00ffff');
+                triggerFxLabel('STANDARD MODE', '#00ffff');
+                reply = "Standard tactical blueprint restored.";
+                handledLocally = true;
+            }
+            else if (containsAny(command, ['thermal mode', 'night vision', 'infrared'])) {
+                isThermal = !isThermal;
+                if (isThermal) {
+                    canvas.classList.add('thermal-mode');
+                    triggerFxLabel('THERMAL ON', '#f59e0b');
+                    reply = "Infrared spectral grid activated.";
+                } else {
+                    canvas.classList.remove('thermal-mode');
+                    triggerFxLabel('THERMAL OFF', '#00ffff');
+                    reply = "Standard optical mode has been restored.";
+                }
+                handledLocally = true;
+            }
+            else if (containsAny(command, ['calibrate suit', 'diagnostics', 'system reboot', 'reboot suit', 'restart suit'])) {
+                changeHUDTheme('#00ffff');
+                document.getElementById('sync-status').innerText = "// SYSTEM CALIBRATION COMPLETE // ALL NODES STABLE";
+                spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 18, ['#00ffff', '#7dd3fc', '#ffffff']);
+                reply = "Suit recalibration complete. All systems are stable and synchronized.";
+                handledLocally = true;
+            }
+
+            if (!handledLocally) {
+                const geminiReply = await askGeminiEnglish(command);
+                const fallbackChoices = [
+                    "Understood, Boss. I am working on it now.",
+                    "Information received. I am handling it clearly in English.",
+                    "Okay, Boss. Your instruction has been processed."
+                ];
+                reply = geminiReply || fallbackChoices[Math.floor(Math.random() * fallbackChoices.length)];
+            }
+
+            fridaySpeak(reply);
         }
 
-        if (!handledLocally) {
-            const geminiReply = await askGeminiEnglish(cmd);
-            const fallbackChoices = [
-                "Understood, Boss. I am working on it now.",
-                "Information received. I am handling it clearly in English.",
-                "Okay, Boss. Your instruction has been processed."
-            ];
-            reply = geminiReply || fallbackChoices[Math.floor(Math.random() * fallbackChoices.length)];
-        }
-
-        fridaySpeak(reply);
-    }
-
-        function changeHUDTheme(hex) {
+function changeHUDTheme(hex) {
             hudColor = hex;
             document.documentElement.style.setProperty('--hud-glow', hex);
             document.getElementById('brand-panel').style.borderColor = hex;
@@ -485,45 +695,69 @@ ${userText}
 
         function drawArcReactor(x, y, size) {
             overlayCtx.save();
+            const pulse = 1 + Math.sin(performance.now() / 180) * 0.08;
+            const outer = size * pulse;
             overlayCtx.beginPath();
             for (let i = 0; i < 6; i++) {
-                const angle = (Math.PI / 3) * i;
-                overlayCtx[i===0?'moveTo':'lineTo'](x + size * Math.cos(angle), y + size * Math.sin(angle));
+                const angle = (Math.PI / 3) * i + performance.now() / 2500;
+                overlayCtx[i===0?'moveTo':'lineTo'](x + outer * Math.cos(angle), y + outer * Math.sin(angle));
             }
             overlayCtx.closePath();
-            overlayCtx.lineWidth = 3; overlayCtx.strokeStyle = hudColor; overlayCtx.stroke();
-            overlayCtx.fillStyle = 'rgba(0, 255, 255, 0.1)'; overlayCtx.fill();
-            
-            overlayCtx.beginPath(); overlayCtx.arc(x, y, size * 0.35, 0, Math.PI * 2);
-            overlayCtx.fillStyle = '#ffffff'; overlayCtx.fill();
-            overlayCtx.shadowBlur = 30; overlayCtx.shadowColor = hudColor; overlayCtx.stroke();
+            overlayCtx.lineWidth = 3;
+            overlayCtx.strokeStyle = hudColor;
+            overlayCtx.shadowBlur = 26;
+            overlayCtx.shadowColor = hudColor;
+            overlayCtx.stroke();
+            overlayCtx.fillStyle = 'rgba(0, 255, 255, 0.10)';
+            overlayCtx.fill();
+
+            overlayCtx.beginPath();
+            overlayCtx.arc(x, y, outer * 0.42, 0, Math.PI * 2);
+            overlayCtx.fillStyle = '#ffffff';
+            overlayCtx.shadowBlur = 30;
+            overlayCtx.shadowColor = hudColor;
+            overlayCtx.fill();
+
+            overlayCtx.beginPath();
+            overlayCtx.arc(x, y, outer * 0.72, 0, Math.PI * 2);
+            overlayCtx.lineWidth = 1.5;
+            overlayCtx.strokeStyle = 'rgba(255,255,255,0.28)';
+            overlayCtx.stroke();
             overlayCtx.restore();
         }
 
         // Modified for Flight Boosters
         function drawThruster(x, y, size, isFlight) {
             overlayCtx.save();
-            overlayCtx.beginPath();
-            overlayCtx.arc(x, y, size, 0, Math.PI * 2);
-            
             if (isFlight) {
-                // Draw downward flame
-                const grad = overlayCtx.createLinearGradient(x, y, x, y + size * 4);
+                const grad = overlayCtx.createLinearGradient(x, y, x, y + size * 5);
                 grad.addColorStop(0, '#ffffff');
-                grad.addColorStop(0.2, '#00ffff');
-                grad.addColorStop(0.6, '#ff8c00'); // Orange booster tail
+                grad.addColorStop(0.15, '#a5f3fc');
+                grad.addColorStop(0.35, '#00ffff');
+                grad.addColorStop(0.7, '#ff8c00');
                 grad.addColorStop(1, 'transparent');
-                
                 overlayCtx.fillStyle = grad;
-                overlayCtx.moveTo(x - size*0.8, y);
-                overlayCtx.lineTo(x + size*0.8, y);
-                overlayCtx.lineTo(x, y + size * 5);
+                overlayCtx.shadowBlur = 28;
+                overlayCtx.shadowColor = '#00ffff';
+                overlayCtx.beginPath();
+                overlayCtx.moveTo(x - size * 0.9, y + size * 0.2);
+                overlayCtx.lineTo(x + size * 0.9, y + size * 0.2);
+                overlayCtx.lineTo(x, y + size * 5.2);
                 overlayCtx.closePath();
                 overlayCtx.fill();
             } else {
-                overlayCtx.strokeStyle = hudColor; overlayCtx.lineWidth = 2; overlayCtx.stroke();
-                overlayCtx.beginPath(); overlayCtx.arc(x, y, size*0.35, 0, Math.PI * 2);
-                overlayCtx.fillStyle = 'rgba(0, 255, 255, 0.4)'; 
+                overlayCtx.beginPath();
+                overlayCtx.arc(x, y, size, 0, Math.PI * 2);
+                overlayCtx.strokeStyle = hudColor;
+                overlayCtx.lineWidth = 2;
+                overlayCtx.shadowBlur = 20;
+                overlayCtx.shadowColor = hudColor;
+                overlayCtx.stroke();
+                overlayCtx.beginPath();
+                overlayCtx.arc(x, y, size * 0.35, 0, Math.PI * 2);
+                overlayCtx.fillStyle = 'rgba(0, 255, 255, 0.55)';
+                overlayCtx.shadowBlur = 18;
+                overlayCtx.shadowColor = '#ffffff';
                 overlayCtx.fill();
             }
             overlayCtx.restore();
@@ -532,35 +766,52 @@ ${userText}
         // Feature 2: Unibeam Rendering
         function drawUnibeam(x, y, h) {
             overlayCtx.save();
-            const width = 150;
+            const width = 160;
+            const pulse = 1 + Math.sin(performance.now() / 120) * 0.05;
             const grad = overlayCtx.createLinearGradient(x - width/2, y, x + width/2, y);
             grad.addColorStop(0, 'transparent');
-            grad.addColorStop(0.2, 'rgba(0, 255, 255, 0.5)');
+            grad.addColorStop(0.18, 'rgba(0, 255, 255, 0.45)');
             grad.addColorStop(0.4, '#ffffff');
             grad.addColorStop(0.6, '#ffffff');
-            grad.addColorStop(0.8, 'rgba(0, 255, 255, 0.5)');
+            grad.addColorStop(0.82, 'rgba(0, 255, 255, 0.45)');
             grad.addColorStop(1, 'transparent');
 
             overlayCtx.fillStyle = grad;
-            overlayCtx.shadowBlur = 50;
+            overlayCtx.shadowBlur = 58;
             overlayCtx.shadowColor = '#00ffff';
-            overlayCtx.fillRect(x - width/2, y - 50, width, h);
+            overlayCtx.fillRect(x - width/2, y - 50, width, h * pulse);
+
+            overlayCtx.beginPath();
+            overlayCtx.arc(x, y, 24 * pulse, 0, Math.PI * 2);
+            overlayCtx.strokeStyle = '#ffffff';
+            overlayCtx.lineWidth = 2;
+            overlayCtx.stroke();
             overlayCtx.restore();
         }
 
         function drawShield(x, y, size) {
             overlayCtx.save();
             const grad = overlayCtx.createRadialGradient(x, y, size*0.1, x, y, size);
-            grad.addColorStop(0, 'rgba(255, 255, 255, 0.4)');
-            grad.addColorStop(0.6, hudColor + '77');
+            grad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
+            grad.addColorStop(0.55, hudColor + '88');
             grad.addColorStop(1, 'transparent');
-            
-            overlayCtx.beginPath(); overlayCtx.arc(x, y, size, 0, Math.PI * 2);
-            overlayCtx.fillStyle = grad; overlayCtx.fill();
+
+            overlayCtx.beginPath();
+            overlayCtx.arc(x, y, size, 0, Math.PI * 2);
+            overlayCtx.fillStyle = grad;
+            overlayCtx.shadowBlur = 20;
+            overlayCtx.shadowColor = hudColor;
+            overlayCtx.fill();
+
+            overlayCtx.beginPath();
+            overlayCtx.arc(x, y, size * 0.72, 0, Math.PI * 2);
+            overlayCtx.strokeStyle = 'rgba(255,255,255,0.25)';
+            overlayCtx.lineWidth = 1.6;
+            overlayCtx.stroke();
             overlayCtx.restore();
         }
 
-        // --- MEDIAPIPE FRAMEWORK HANDLING MAPS ---
+        // --- MEDIAPIPE FRAMEWORK HANDLING MAPS ---// --- MEDIAPIPE FRAMEWORK HANDLING MAPS ---
         function onResults(results) {
             ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
             ctx.fillStyle = 'rgba(1, 6, 12, 0.72)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
@@ -630,7 +881,11 @@ ${userText}
                         if (lWrist.visibility > 0.5) drawThruster(lWrist.x * w, lWrist.y * h, 18 * scale, true);
                         if (rWrist.visibility > 0.5) drawThruster(rWrist.x * w, rWrist.y * h, 18 * scale, true);
                         
-                        if(!lastFlightState) { fridaySpeak("Flight boosters are active. Stabilizing altitude."); }
+                        if(!lastFlightState) { 
+                            fridaySpeak("Flight boosters are active. Stabilizing altitude.");
+                            spawnParticles(lWrist.x * w, lWrist.y * h, 4, ['#00ffff', '#ffffff']);
+                            spawnParticles(rWrist.x * w, rWrist.y * h, 4, ['#00ffff', '#ffffff']);
+                        }
                     } else {
                         flightPanel.classList.add('hidden');
                         
@@ -645,6 +900,7 @@ ${userText}
                         drainPower(0.35);
                         if (!lastRepulsorState) { fridaySpeak("Repulsor matrix is discharging."); }
                         if (Math.random() > 0.75) playFX('repulsor');
+                        spawnParticles((lFire ? lWrist.x : rWrist.x) * w, (lFire ? lWrist.y : rWrist.y) * h, 4, ['#ffffff', '#00ffff']);
                         
                         // Blast visuals
                         if(lFire) { overlayCtx.beginPath(); overlayCtx.arc(lWrist.x*w, lWrist.y*h, 25*scale, 0, Math.PI*2); overlayCtx.fillStyle='#fff'; overlayCtx.fill(); }
@@ -660,10 +916,11 @@ ${userText}
                     const lHandToRShoulder = Math.hypot(lWrist.x - rShoulder.x, lWrist.y - rShoulder.y) < 0.08;
                     
                     if ((rHandToLShoulder || lHandToRShoulder) && missiles > 0 && Math.random() > 0.94) {
-                        activeMissiles.push({ 
-                            x: (rHandToLShoulder ? lShoulder.x : rShoulder.x) * w, 
-                            y: (rHandToLShoulder ? lShoulder.y : rShoulder.y) * h 
-                        });
+                        const spawnX = (rHandToLShoulder ? lShoulder.x : rShoulder.x) * w;
+                        const spawnY = (rHandToLShoulder ? lShoulder.y : rShoulder.y) * h;
+                        activeMissiles.push({ x: spawnX, y: spawnY });
+                        spawnParticles(spawnX, spawnY, 10, ['#ffffff', '#00ffff', '#f59e0b']);
+                        spawnRipple(spawnX, spawnY, '#00ffff');
                         missiles--; 
                         document.getElementById('missile-count').innerText = missiles;
                         playFX('missile');
@@ -689,10 +946,16 @@ ${userText}
             // Render Active Launched Missiles
             for (let i = activeMissiles.length - 1; i >= 0; i--) {
                 let m = activeMissiles[i]; m.y -= 25; 
-                overlayCtx.beginPath(); overlayCtx.arc(m.x, m.y, 4, 0, Math.PI*2);
-                overlayCtx.fillStyle = '#ffffff'; overlayCtx.fill();
+                overlayCtx.beginPath();
+                overlayCtx.arc(m.x, m.y, 4, 0, Math.PI*2);
+                overlayCtx.fillStyle = '#ffffff';
+                overlayCtx.shadowBlur = 12;
+                overlayCtx.shadowColor = '#00ffff';
+                overlayCtx.fill();
                 if (m.y < 0) activeMissiles.splice(i, 1);
             }
+
+            renderVisualEffects();
         }
 
         function drainPower(amount) {
@@ -726,9 +989,9 @@ ${userText}
         setInterval(() => {
             if(isSuitedUp && !isFridaySpeaking && Math.random() > 0.6) {
                 const recommendations = [
-                    "Boss, main suggest karungi ki aap flight boosters try karein. Arms down rakhiye.",
-                    "Sir, Verma Health Scan is available. You can say \"run health scan\".",
-                    "Ordnance stack is stable, Boss. You can cross your hands and fire the Unibeam blast.",
+                    "Boss, try the flight boosters. Keep both arms down.",
+                    "Sir, the health scan is available. Say \"run health scan\".",
+                    "Ordnance stack is stable, Boss. Cross your hands to fire the Unibeam.",
                     "Stealth mode is on standby, Sir. What should I activate?"
                 ];
                 const rec = recommendations[Math.floor(Math.random() * recommendations.length)];
