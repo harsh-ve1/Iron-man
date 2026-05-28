@@ -60,6 +60,10 @@
         }
         .theme-glow { color: var(--hud-glow); }
         .theme-border { border-color: var(--hud-glow); }
+        .scan-active-state .output_canvas,
+        .scan-active-state .overlay_canvas {
+            filter: contrast(1.25) brightness(1.05) saturate(1.2);
+        }
     </style>
 </head>
 <body>
@@ -113,7 +117,7 @@
                 </div>
                 <div class="border-t border-cyan-900/50 pt-2.5 mt-0.5">
                     <div id="user-speech-text" class="text-[10px] text-cyan-500 font-mono tracking-wider truncate uppercase">
-                        > Systems initialized. Awaiting feedback... Say "track scan" or "reload missiles".
+                        > Systems initialized. Awaiting feedback... Use the TRACK SCAN button or say "track scan".
                     </div>
                 </div>
             </div>
@@ -133,13 +137,18 @@
         </div>
 
         <div class="flex justify-between items-end w-full">
-            <div class="text-[11px] text-cyan-400 bg-black/75 p-4 border border-cyan-900/40 leading-relaxed tracking-wide rounded-lg backdrop-blur-md max-w-sm">
-                <span class="text-white font-black tracking-wider">// NEW COMMANDS</span><br>
-                <div class="mt-2 text-cyan-500 font-mono text-[10px]">
-                    <span class="text-white">> "Run health scan" / "Check biometrics"</span><br>
-                    <span class="text-white">> "Unibeam" / "Blast them"</span><br>
-                    <span class="text-white">> "How are you Friday" / "Status report" / "Reload missiles" / "Track scan" / "Analyze this"</span>
+            <div class="flex flex-col gap-3">
+                <div class="text-[11px] text-cyan-400 bg-black/75 p-4 border border-cyan-900/40 leading-relaxed tracking-wide rounded-lg backdrop-blur-md max-w-sm">
+                    <span class="text-white font-black tracking-wider">// NEW COMMANDS</span><br>
+                    <div class="mt-2 text-cyan-500 font-mono text-[10px]">
+                        <span class="text-white">> "Run health scan" / "Check biometrics"</span><br>
+                        <span class="text-white">> "Unibeam" / "Blast them"</span><br>
+                        <span class="text-white">> "How are you Friday" / "Status report" / "Reload missiles" / "Track scan" / "Analyze this"</span>
+                    </div>
                 </div>
+                <button id="track-scan-btn" class="pointer-events-auto self-start px-5 py-3 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-200 text-xs font-black tracking-[0.35em] uppercase shadow-[0_0_20px_rgba(0,255,255,0.15)] hover:bg-cyan-400/20 hover:shadow-[0_0_30px_rgba(0,255,255,0.3)] transition-all duration-200 active:scale-[0.98]">
+                    Track Scan
+                </button>
             </div>
             
             <div id="weapon-panel" class="text-right border-r-4 border-cyan-400 pr-4 bg-black/60 backdrop-blur-md py-4 pl-12 rounded-l-md border-b border-cyan-900/30">
@@ -183,6 +192,8 @@
         let preferredFemaleVoice = null;
         let visionBusy = false;
         let armedOnce = false;
+        let scanModeActive = false;
+        let scanLockUntil = 0;
 
         function addLog(msg) {
             const feed = document.getElementById('log-feed');
@@ -244,6 +255,58 @@
         function spawnRipple(x, y, color = '#00ffff') {
             ripples.push({ x, y, radius: 0, maxRadius: 180, alpha: 0.82, color });
             if (ripples.length > 18) ripples.shift();
+        }
+
+        function isScanLocked() {
+            return scanModeActive || Date.now() < scanLockUntil;
+        }
+
+        function setScanLocked(locked) {
+            scanModeActive = locked;
+            scanLockUntil = locked ? Date.now() + 9000 : 0;
+            document.body.classList.toggle('scan-active-state', locked);
+            const button = document.getElementById('track-scan-btn');
+            if (button) {
+                button.disabled = locked;
+                button.textContent = locked ? 'SCANNING...' : 'TRACK SCAN';
+                button.style.opacity = locked ? '0.65' : '1';
+                button.style.cursor = locked ? 'not-allowed' : 'pointer';
+            }
+            if (locked) {
+                document.getElementById('sync-status').innerText = "// TRACK SCAN ACTIVE // HOLD OBJECT STEADY";
+            } else {
+                document.getElementById('sync-status').innerText = isSuitedUp
+                    ? "// NEURAL LINK ESTABLISHED // READY FOR COMMANDS"
+                    : "// SYSTEM ONLINE // AWAITING NEURAL LINK";
+            }
+        }
+
+        function playScanSweep() {
+            const line = document.getElementById('scan-line');
+            line.classList.add('scan-active');
+            setTimeout(() => line.classList.remove('scan-active'), 2500);
+
+            const rect = overlayCanvas.getBoundingClientRect();
+            const x = rect.left + rect.width / 2;
+            const y = rect.top + rect.height / 2;
+            spawnParticles(x, y, 16, ['#ffffff', '#00ffff', '#7dd3fc']);
+            spawnRipple(x, y, '#00ffff');
+            triggerFxLabel('TRACK SCAN', '#00ffff');
+            flashCenterPulse('#ffffff');
+        }
+
+        async function runTrackScan() {
+            if (visionBusy || isScanLocked()) return;
+            setScanLocked(true);
+            playScanSweep();
+
+            try {
+                fridaySpeak("Track scan engaged. Hold the object steady in bright light.", true);
+                const result = await analyzeSceneWithGemini("Track scan and identify the visible object in this frame.");
+                fridaySpeak(result || "I could not identify the object clearly.", true);
+            } finally {
+                setTimeout(() => setScanLocked(false), 700);
+            }
         }
 
         function triggerFxLabel(text, color = '#00ffff') {
@@ -434,6 +497,7 @@ Rules:
 - If multiple objects are visible, name the most important one first and mention the others briefly.
 - Keep the answer short, direct, and confident.
 - Do not mention that you are an AI unless the image is unclear.
+- Favor the most likely object if lighting is bright but not perfect.
 
 User request: ${userText}
 `;
@@ -604,6 +668,11 @@ User request: ${userText}
                 if (!command) return;
 
                 document.getElementById('user-speech-text').innerText = `> "${command.toUpperCase()}"`;
+
+                if (scanModeActive) {
+                    return;
+                }
+
                 processBilingualComms(command);
             };
         }
@@ -613,26 +682,24 @@ User request: ${userText}
             const h = overlayCanvas.height;
 
             const origin = startPoint || (side === 'left'
-                ? { x: w * 0.44, y: h * 0.58 }
-                : { x: w * 0.56, y: h * 0.58 });
+                ? { x: w * 0.435, y: h * 0.605 }
+                : { x: w * 0.565, y: h * 0.605 });
 
-            const targetLift = 0.85 + Math.random() * 0.9;
             const targetSpread = side === 'left'
-                ? -2.4 - Math.random() * 1.4
-                : 2.4 + Math.random() * 1.4;
+                ? -2.6 - Math.random() * 1.5
+                : 2.6 + Math.random() * 1.5;
 
             activeMissiles.push({
                 x: origin.x,
                 y: origin.y,
                 vx: targetSpread,
-                vy: -5.2 - Math.random() * 1.0,
-                life: 128,
+                vy: -5.4 - Math.random() * 0.9,
+                life: 132,
                 trail: [],
-                side,
-                lift: targetLift
+                side
             });
 
-            spawnParticles(origin.x, origin.y, 18, ['#ffffff', '#00ffff', '#60a5fa']);
+            spawnParticles(origin.x, origin.y, 22, ['#ffffff', '#00ffff', '#60a5fa']);
             spawnRipple(origin.x, origin.y, '#00ffff');
             triggerFxLabel('ARM LAUNCH', '#00ffff');
             playFX('missile');
@@ -641,6 +708,11 @@ User request: ${userText}
         async function processBilingualComms(cmd) {
             const command = normalizeCommand(cmd);
             if (!command) return;
+
+            if (isScanLocked()) {
+                triggerFxLabel("SCAN LOCKED", "#00ffff");
+                return;
+            }
 
             triggerFxLabel("COMMAND ACCEPTED", hudColor);
             flashCenterPulse(hudColor);
@@ -663,13 +735,7 @@ User request: ${userText}
                 'look around', 'scan surroundings', 'scan the room', 'inspect object',
                 'describe this', 'recognize object', 'object analysis', 'vision scan'
             ])) {
-                document.getElementById('scan-line').classList.add('scan-active');
-                triggerFxLabel('TRACK SCAN', '#00ffff');
-                spawnRipple(window.innerWidth / 2, window.innerHeight / 2, '#00ffff');
-                playFX('suit');
-                setTimeout(() => document.getElementById('scan-line').classList.remove('scan-active'), 2500);
-                const visionReply = await analyzeSceneWithGemini(command);
-                fridaySpeak(visionReply || "I could not identify the object clearly.", true);
+                await runTrackScan();
                 return;
             }
 
@@ -1057,6 +1123,29 @@ User request: ${userText}
                 const lm = results.poseLandmarks;
                 const w = overlayCanvas.width, h = overlayCanvas.height;
 
+                if (scanModeActive) {
+                    const scanHint = "TRACK SCAN ACTIVE // HOLD OBJECT STEADY // NO COMBAT FUNCTIONS";
+                    document.getElementById('sync-status').innerText = `// ${scanHint}`;
+                    const cx = w / 2;
+                    const cy = h / 2;
+                    overlayCtx.save();
+                    overlayCtx.strokeStyle = 'rgba(0,255,255,0.95)';
+                    overlayCtx.lineWidth = 2;
+                    overlayCtx.shadowBlur = 24;
+                    overlayCtx.shadowColor = '#00ffff';
+                    overlayCtx.beginPath();
+                    overlayCtx.moveTo(0, cy - 40);
+                    overlayCtx.lineTo(w, cy - 40);
+                    overlayCtx.stroke();
+                    overlayCtx.beginPath();
+                    overlayCtx.moveTo(0, cy + 40);
+                    overlayCtx.lineTo(w, cy + 40);
+                    overlayCtx.stroke();
+                    overlayCtx.restore();
+                    renderVisualEffects();
+                    return;
+                }
+
                 if (!isSuitedUp && !isDetecting) {
                     isDetecting = true;
                     document.getElementById('sync-status').innerText = "// RETINAL SECURITY CONFIRMED. INITIALIZING CORE...";
@@ -1164,21 +1253,21 @@ User request: ${userText}
                     }
                     lastRepulsorState = (lFire || rFire);
 
-                    const leftForearmAim = Math.hypot(lWrist.x - lElbow.x, lWrist.y - lElbow.y) < 0.16 || lWrist.y < lElbow.y + 0.05;
-                    const rightForearmAim = Math.hypot(rWrist.x - rElbow.x, rWrist.y - rElbow.y) < 0.16 || rWrist.y < rElbow.y + 0.05;
-                    const leftLaunchReady = lWrist.visibility > 0.5 && lElbow.visibility > 0.5 && leftForearmAim && lWrist.x < lElbow.x + 0.18;
-                    const rightLaunchReady = rWrist.visibility > 0.5 && rElbow.visibility > 0.5 && rightForearmAim && rWrist.x > rElbow.x - 0.18;
+                    const leftForearmAim = Math.hypot(lWrist.x - lElbow.x, lWrist.y - lElbow.y) < 0.18 || lWrist.y < lElbow.y + 0.06;
+                    const rightForearmAim = Math.hypot(rWrist.x - rElbow.x, rWrist.y - rElbow.y) < 0.18 || rWrist.y < rElbow.y + 0.06;
+                    const leftLaunchReady = lWrist.visibility > 0.5 && lElbow.visibility > 0.5 && leftForearmAim && lWrist.x < lElbow.x + 0.22;
+                    const rightLaunchReady = rWrist.visibility > 0.5 && rElbow.visibility > 0.5 && rightForearmAim && rWrist.x > rElbow.x - 0.22;
 
                     if ((leftLaunchReady || rightLaunchReady) && missiles > 0 && Math.random() > 0.92) {
                         const side = leftLaunchReady ? 'left' : 'right';
                         const origin = side === 'left'
                             ? {
-                                x: ((lElbow.x + lWrist.x) / 2) * w - 18,
-                                y: ((lElbow.y + lWrist.y) / 2) * h
+                                x: ((lElbow.x * 0.45 + lWrist.x * 0.55)) * w - 10,
+                                y: ((lElbow.y * 0.35 + lWrist.y * 0.65)) * h
                               }
                             : {
-                                x: ((rElbow.x + rWrist.x) / 2) * w + 18,
-                                y: ((rElbow.y + rWrist.y) / 2) * h
+                                x: ((rElbow.x * 0.45 + rWrist.x * 0.55)) * w + 10,
+                                y: ((rElbow.y * 0.35 + rWrist.y * 0.65)) * h
                               };
 
                         launchMissile(side, origin);
@@ -1255,6 +1344,17 @@ User request: ${userText}
         camera.start();
 
         initVoiceRecognition();
+
+        const trackScanBtn = document.getElementById('track-scan-btn');
+        if (trackScanBtn) {
+            trackScanBtn.addEventListener('click', () => {
+                if (!isSuitedUp) {
+                    fridaySpeak("Suit is not active yet. Lock the neural link first.", true);
+                    return;
+                }
+                runTrackScan();
+            });
+        }
 
         document.addEventListener('pointerdown', () => {
             if (armedOnce) return;
