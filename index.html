@@ -31,6 +31,11 @@
         .flash-overlay { position: absolute; inset: 0; background: #fff; z-index: 99; opacity: 0; pointer-events: none; }
         .flash-active { animation: flash-bang 1s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; }
 
+        /* Scanning Sweep (New Feature) */
+        .scan-line { position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: rgba(0, 255, 255, 0.8); box-shadow: 0 0 20px 5px rgba(0, 255, 255, 0.5); z-index: 15; opacity: 0; pointer-events: none; }
+        .scan-active { animation: scan-sweep 2.5s ease-in-out; opacity: 1; }
+        @keyframes scan-sweep { 0% { top: 0; opacity: 1; } 50% { top: 100%; opacity: 1; } 100% { top: 0; opacity: 0; } }
+
         /* F.R.I.D.A.Y. Box & Custom UI Elements */
         .friday-box { background: rgba(0, 8, 12, 0.88); border: 1px solid rgba(0, 255, 255, 0.25); backdrop-blur: 12px; box-shadow: 0 0 30px rgba(0, 255, 255, 0.08); }
         .terminal-scroll { max-height: 120px; overflow: hidden; mask-image: linear-gradient(to top, transparent, black 20%); }
@@ -39,7 +44,9 @@
         
         /* Camera shake on firing repulsors */
         .shake { animation: screen-shake 0.2s ease-in-out infinite; }
+        .heavy-shake { animation: screen-shake-heavy 0.1s ease-in-out infinite; }
         @keyframes screen-shake { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-3px, 2px); } 75% { transform: translate(3px, -2px); } }
+        @keyframes screen-shake-heavy { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-8px, 6px); } 75% { transform: translate(8px, -6px); } }
 
         /* Targeting Reticle Centerpiece */
         .reticle { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 120px; height: 120px; border: 1px dashed rgba(0,255,255,0.2); border-radius: 50%; z-index: 15; pointer-events: none; display: none; }
@@ -64,6 +71,7 @@
     <div class="vignette"></div>
     <div class="grid-bg"></div>
     <div id="flash" class="flash-overlay"></div>
+    <div id="scan-line" class="scan-line"></div>
     
     <div id="center-reticle" class="reticle">
         <div class="reticle-inner theme-border"></div>
@@ -116,20 +124,20 @@
                 <div>[SYS_LOG] Nanotech topology mapping...</div>
             </div>
             
-            <div id="flight-panel" class="hidden text-right font-mono text-[10px] text-cyan-400 bg-black/50 p-3 border border-cyan-500/30 rounded-lg">
-                <div class="text-[8px] tracking-widest text-white font-bold mb-1">FLIGHT STABILIZATION</div>
-                <div>ALTITUDE: <span class="text-white animate-pulse">AUTO_NAV</span></div>
-                <div>V_PITCH: +0.042</div>
+            <div id="flight-panel" class="hidden text-right font-mono bg-black/50 p-3 border border-orange-500/50 rounded-lg shadow-[0_0_15px_rgba(255,165,0,0.2)]">
+                <div class="text-[10px] tracking-widest text-orange-400 font-bold mb-1 animate-pulse">FLIGHT BOOSTERS: ENGAGED</div>
+                <div class="text-[9px] text-cyan-400">ALTITUDE: <span class="text-white">AUTO_NAV</span></div>
+                <div class="text-[9px] text-cyan-400">THRUST VECTORS: <span class="text-white">STABILIZED</span></div>
             </div>
         </div>
 
         <div class="flex justify-between items-end w-full">
             <div class="text-[11px] text-cyan-400 bg-black/75 p-4 border border-cyan-900/40 leading-relaxed tracking-wide rounded-lg backdrop-blur-md max-w-sm">
-                <span class="text-white font-black tracking-wider">// HINDI & ENGLISH COMMANDS</span><br>
+                <span class="text-white font-black tracking-wider">// NEW COMMANDS</span><br>
                 <div class="mt-2 text-cyan-500 font-mono text-[10px]">
-                    <span class="text-white">> "Kaise ho Friday" / "Status report"</span><br>
-                    <span class="text-white">> "Power up" / "Suit charge karo"</span><br>
-                    <span class="text-white">> "Activate Stealth Mode" / "Danger Red"</span>
+                    <span class="text-white">> "Run health scan" / "Check biometrics"</span><br>
+                    <span class="text-white">> "Unibeam" / "Blast them"</span><br>
+                    <span class="text-white">> "Kaise ho Friday" / "Status report"</span>
                 </div>
             </div>
             
@@ -154,6 +162,8 @@
         let activeMissiles = [];
         let lastShieldState = false;
         let lastRepulsorState = false;
+        let lastFlightState = false;
+        let unibeamCharging = false;
         let powerCore = 100;
         let isThermal = false;
         let hudColor = '#00ffff';
@@ -186,7 +196,7 @@
                 utterance.pitch = 1.05; 
                 
                 // Identify Language Strategy
-                const isHindi = /[\u0900-\u097F]/.test(text) || text.includes("है") || text.includes("हूँ") || text.includes("बॉस");
+                const isHindi = /[\u0900-\u097F]/.test(text) || text.includes("hai") || text.includes("hoon") || text.includes("sir") || text.includes("kijiye");
                 const voices = window.speechSynthesis.getVoices();
                 
                 let preferredVoice;
@@ -251,38 +261,46 @@
         function processBilingualComms(cmd) {
             let reply = "";
 
+            // Feature 3: Health/Biometric Scan 
+            if (cmd.includes('scan') || cmd.includes('health') || cmd.includes('biometric')) {
+                document.getElementById('scan-line').classList.add('scan-active');
+                playFX('suit'); // reuse tech sound
+                setTimeout(() => document.getElementById('scan-line').classList.remove('scan-active'), 2500);
+                reply = "Verma Health Scan initialized. Vitals are steady. Heart rate aur core temperature normal hai, Boss.";
+            }
+            // Feature 2: Unibeam voice prep
+            else if (cmd.includes('unibeam') || cmd.includes('blast')) {
+                reply = "Unibeam routing ready. Apne dono hands cross kijiye chest par to fire, Sir.";
+            }
             // Status Query
-            if (cmd.includes('status') || cmd.includes('report') || cmd.includes('suit ka haal')) {
-                reply = `All systems are green, Boss. Matrix core power is at ${Math.floor(powerCore)} percent. Heavy projectiles are ready.`;
+            else if (cmd.includes('status') || cmd.includes('report') || cmd.includes('suit ka haal')) {
+                reply = `All systems are green, Boss. Matrix core power is at ${Math.floor(powerCore)} percent.`;
             } 
-            // Conversational Greeting
             else if (cmd.includes('kaise ho') || cmd.includes('how are you')) {
-                reply = "Main badiya hoon, Boss! Verma Group Advanced Tech Program fully active hai. Aap bataiye kya hukm hai?";
+                reply = "Main badiya hoon, Boss! Verma Group Advanced Tech Program fully active hai.";
             } 
             else if (cmd.includes('hello') || cmd.includes('friday') || cmd.includes('suno')) {
-                reply = "Online and ready, Boss. Systems are looking sharp.";
+                reply = "Online and ready, Sir. Systems are looking sharp.";
             }
             // Power Grid Operations
-            else if (cmd.includes('charge') || cmd.includes('power up') || cmd.includes('recharge')) {
+            else if (cmd.includes('charge') || cmd.includes('power up')) {
                 powerCore = 100;
                 document.getElementById('power-val').innerText = powerCore;
-                reply = "Nanotech energy array fully optimized. Power grid completely full ho chuka hai.";
+                reply = "Nanotech energy array fully optimized. Power grid 100% par hai.";
             } 
-            // Custom Visual Matrix Toggles (NEW FEATURE)
             else if (cmd.includes('stealth mode')) {
                 changeHUDTheme('#a855f7');
                 reply = "Stealth configuration loaded. Visual signatures minimized.";
             }
             else if (cmd.includes('danger') || cmd.includes('red')) {
                 changeHUDTheme('#ef4444');
-                reply = "Tactical combat configuration engaged. Weapon buffers amplified.";
+                reply = "Tactical combat configuration engaged.";
             }
             else if (cmd.includes('normal') || cmd.includes('cyan')) {
                 changeHUDTheme('#00ffff');
                 reply = "Standard tactical blueprint restored.";
             }
-            // Thermal Layout
-            else if (cmd.includes('thermal') || cmd.includes('infrared') || cmd.includes('night vision')) {
+            else if (cmd.includes('thermal') || cmd.includes('night vision')) {
                 isThermal = !isThermal;
                 if(isThermal) {
                     canvas.classList.add('thermal-mode');
@@ -292,14 +310,11 @@
                     reply = "Standard optical configuration par wapas switch kar diya hai.";
                 }
             }
-            else if (cmd.includes('who built you') || cmd.includes('kisne banaya') || cmd.includes('kiska suit hai')) {
-                reply = "I am F.R.I.D.A.Y., custom engineered under the premium Verma Group Advanced AI Initiative.";
-            }
             else {
                 const choices = [
-                    "Understood, Boss. Core arrays update ho chuke hain.",
+                    "Understood, Sir. Core arrays update ho chuke hain.",
                     "Telemetry captured. Vector updates mapping processed.",
-                    "Ji Boss, task logic stack parameters optimize kar diye hain."
+                    "Ji Boss, task logic optimize kar di hai."
                 ];
                 reply = choices[Math.floor(Math.random() * choices.length)];
             }
@@ -342,6 +357,12 @@
                 gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.2, now + 0.04);
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
                 osc.start(now); osc.stop(now + 0.45);
+            } else if (type === 'unibeam') {
+                osc.type = 'square'; osc.frequency.setValueAtTime(100, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.5);
+                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.5, now + 0.1);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 1.0);
+                osc.start(now); osc.stop(now + 1.0);
             }
         }
 
@@ -412,15 +433,51 @@
             overlayCtx.restore();
         }
 
-        function drawRepulsor(x, y, size, isFiring) {
+        // Modified for Flight Boosters
+        function drawThruster(x, y, size, isFlight) {
             overlayCtx.save();
-            overlayCtx.beginPath(); overlayCtx.arc(x, y, size, 0, Math.PI * 2);
-            overlayCtx.strokeStyle = hudColor; overlayCtx.lineWidth = 2; overlayCtx.stroke();
+            overlayCtx.beginPath();
+            overlayCtx.arc(x, y, size, 0, Math.PI * 2);
             
-            overlayCtx.beginPath(); overlayCtx.arc(x, y, isFiring ? size*0.9 : size*0.35, 0, Math.PI * 2);
-            overlayCtx.fillStyle = isFiring ? '#fff' : 'rgba(0, 255, 255, 0.4)'; 
-            if(isFiring) { overlayCtx.shadowBlur = 40; overlayCtx.shadowColor = hudColor; }
-            overlayCtx.fill();
+            if (isFlight) {
+                // Draw downward flame
+                const grad = overlayCtx.createLinearGradient(x, y, x, y + size * 4);
+                grad.addColorStop(0, '#ffffff');
+                grad.addColorStop(0.2, '#00ffff');
+                grad.addColorStop(0.6, '#ff8c00'); // Orange booster tail
+                grad.addColorStop(1, 'transparent');
+                
+                overlayCtx.fillStyle = grad;
+                overlayCtx.moveTo(x - size*0.8, y);
+                overlayCtx.lineTo(x + size*0.8, y);
+                overlayCtx.lineTo(x, y + size * 5);
+                overlayCtx.closePath();
+                overlayCtx.fill();
+            } else {
+                overlayCtx.strokeStyle = hudColor; overlayCtx.lineWidth = 2; overlayCtx.stroke();
+                overlayCtx.beginPath(); overlayCtx.arc(x, y, size*0.35, 0, Math.PI * 2);
+                overlayCtx.fillStyle = 'rgba(0, 255, 255, 0.4)'; 
+                overlayCtx.fill();
+            }
+            overlayCtx.restore();
+        }
+
+        // Feature 2: Unibeam Rendering
+        function drawUnibeam(x, y, h) {
+            overlayCtx.save();
+            const width = 150;
+            const grad = overlayCtx.createLinearGradient(x - width/2, y, x + width/2, y);
+            grad.addColorStop(0, 'transparent');
+            grad.addColorStop(0.2, 'rgba(0, 255, 255, 0.5)');
+            grad.addColorStop(0.4, '#ffffff');
+            grad.addColorStop(0.6, '#ffffff');
+            grad.addColorStop(0.8, 'rgba(0, 255, 255, 0.5)');
+            grad.addColorStop(1, 'transparent');
+
+            overlayCtx.fillStyle = grad;
+            overlayCtx.shadowBlur = 50;
+            overlayCtx.shadowColor = '#00ffff';
+            overlayCtx.fillRect(x - width/2, y - 50, width, h);
             overlayCtx.restore();
         }
 
@@ -467,39 +524,69 @@
                     // Shield Geometry Logic
                     const wristDist = Math.hypot(lWrist.x - rWrist.x, lWrist.y - rWrist.y);
                     const shieldActive = (wristDist < 0.08 && lWrist.y > lShoulder.y);
-                    if (shieldActive) {
-                        drawShield(chestX, chestY, 240 * scale);
-                        if (!lastShieldState) { fridaySpeak("Hardlight shielding protocol active."); addLog("Shield optimized."); }
-                        drainPower(0.25);
+                    
+                    // Feature 2: Unibeam Logic (wrists crossed close to chest)
+                    const isUnibeamPose = (wristDist < 0.1 && Math.abs(lWrist.y - chestY/h) < 0.15 && Math.abs(rWrist.y - chestY/h) < 0.15);
+
+                    if (isUnibeamPose) {
+                        drawUnibeam(chestX, chestY, h);
+                        document.body.classList.add('heavy-shake');
+                        drainPower(1.0);
+                        if (!unibeamCharging) { 
+                            fridaySpeak("Unibeam discharging. Clear the path!"); 
+                            playFX('unibeam'); 
+                        }
+                        unibeamCharging = true;
+                    } else {
+                        unibeamCharging = false;
+                        document.body.classList.remove('heavy-shake');
+                        
+                        if (shieldActive) {
+                            drawShield(chestX, chestY, 240 * scale);
+                            if (!lastShieldState) { fridaySpeak("Hardlight shielding protocol active."); addLog("Shield optimized."); }
+                            drainPower(0.25);
+                        }
                     }
                     lastShieldState = shieldActive;
 
-                    // Repulsor Mechanics Logic
+                    // Feature 1: Flight Boosters / Repulsors
                     const lFire = lWrist.y < lElbow.y - 0.05;
                     const rFire = rWrist.y < rElbow.y - 0.05;
+                    const isFlyingPose = Math.abs(lWrist.y - lShoulder.y) < 0.1 && Math.abs(rWrist.y - rShoulder.y) < 0.1 && !lFire && !rFire && !isUnibeamPose;
                     
-                    if (lWrist.visibility > 0.5) drawRepulsor(lWrist.x * w, lWrist.y * h, 18 * scale, lFire);
-                    if (rWrist.visibility > 0.5) drawRepulsor(rWrist.x * w, rWrist.y * h, 18 * scale, rFire);
+                    const flightPanel = document.getElementById('flight-panel');
                     
-                    if (lFire || rFire) {
+                    if (isFlyingPose) {
+                        flightPanel.classList.remove('hidden');
+                        drainPower(0.15);
+                        // Draw thrusters pointing down from hands
+                        if (lWrist.visibility > 0.5) drawThruster(lWrist.x * w, lWrist.y * h, 18 * scale, true);
+                        if (rWrist.visibility > 0.5) drawThruster(rWrist.x * w, rWrist.y * h, 18 * scale, true);
+                        
+                        if(!lastFlightState) { fridaySpeak("Flight boosters engaged. Stabilizing altitude."); }
+                    } else {
+                        flightPanel.classList.add('hidden');
+                        
+                        // Standard Repulsors
+                        if (lWrist.visibility > 0.5 && !isUnibeamPose) drawThruster(lWrist.x * w, lWrist.y * h, 18 * scale, false);
+                        if (rWrist.visibility > 0.5 && !isUnibeamPose) drawThruster(rWrist.x * w, rWrist.y * h, 18 * scale, false);
+                    }
+                    lastFlightState = isFlyingPose;
+                    
+                    if ((lFire || rFire) && !isUnibeamPose && !isFlyingPose) {
                         document.body.classList.add('shake');
                         drainPower(0.35);
                         if (!lastRepulsorState) { fridaySpeak("Repulsor matrix discharging."); }
                         if (Math.random() > 0.75) playFX('repulsor');
-                    } else {
+                        
+                        // Blast visuals
+                        if(lFire) { overlayCtx.beginPath(); overlayCtx.arc(lWrist.x*w, lWrist.y*h, 25*scale, 0, Math.PI*2); overlayCtx.fillStyle='#fff'; overlayCtx.fill(); }
+                        if(rFire) { overlayCtx.beginPath(); overlayCtx.arc(rWrist.x*w, rWrist.y*h, 25*scale, 0, Math.PI*2); overlayCtx.fillStyle='#fff'; overlayCtx.fill(); }
+
+                    } else if (!isUnibeamPose) {
                         document.body.classList.remove('shake');
                     }
                     lastRepulsorState = (lFire || rFire);
-
-                    // Flight Stabilization Mode Detection (NEW FEATURE)
-                    const isFlyingPose = Math.abs(lWrist.y - lShoulder.y) < 0.1 && Math.abs(rWrist.y - rShoulder.y) < 0.1 && !lFire && !rFire;
-                    const flightPanel = document.getElementById('flight-panel');
-                    if (isFlyingPose) {
-                        flightPanel.classList.remove('hidden');
-                        drainPower(0.05);
-                    } else {
-                        flightPanel.classList.add('hidden');
-                    }
 
                     // Micro-Missile Payload Launch Layout
                     const rHandToLShoulder = Math.hypot(rWrist.x - lShoulder.x, rWrist.y - lShoulder.y) < 0.08;
@@ -527,7 +614,7 @@
                 document.getElementById('sync-status').innerText = "// SYSTEM DISCONNECTED // AWAITING NEURAL SYNAPSE";
                 document.getElementById('center-reticle').style.display = 'none';
                 document.getElementById('main-hud').classList.remove('hud-visible');
-                document.body.classList.remove('shake');
+                document.body.classList.remove('shake', 'heavy-shake');
                 if (recognition) recognition.stop();
                 fridaySpeak("Target dropped. Suit ko standby network par dal rhi hoon.");
             }
@@ -560,13 +647,27 @@
 
         // Regenerate Energy Matrix Arrays Over-Time
         setInterval(() => {
-            if(isSuitedUp && !lastRepulsorState && !lastShieldState) {
+            if(isSuitedUp && !lastRepulsorState && !lastShieldState && !unibeamCharging && !lastFlightState) {
                 if(powerCore < 100) {
                     powerCore = Math.min(100, powerCore + 0.4);
                     document.getElementById('power-val').innerText = Math.floor(powerCore);
                 }
             }
         }, 1200);
+
+        // Feature 4: Autonomous Proactive F.R.I.D.A.Y. Recommendations
+        setInterval(() => {
+            if(isSuitedUp && !isFridaySpeaking && Math.random() > 0.6) {
+                const recommendations = [
+                    "Boss, main suggest karungi ki aap flight boosters try karein. Arms down rakhiye.",
+                    "Sir, Verma Health Scan available hai. Aap 'run health scan' bol sakte hain.",
+                    "Ordnance stack stable hai, Boss. Aap hands cross karke Unibeam blast fire kar sakte hain.",
+                    "Stealth mode standby par hai sir, kya activate karun?"
+                ];
+                const rec = recommendations[Math.floor(Math.random() * recommendations.length)];
+                fridaySpeak(rec);
+            }
+        }, 20000); // Analyzes every 20 seconds
     </script>
 </body>
 </html>
