@@ -3,79 +3,78 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Iron Man Mark 85 - Nanotech Weapon OS</title>
+    <title>Iron Man Mark 85 - Full Body Nanotech</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/holistic/holistic.js" crossorigin="anonymous"></script>
     
     <style>
         :root {
             --stark-gold: #f1c40f;
             --stark-red: #c0392b;
+            --stark-dark-red: #7a0000;
             --jarvis-blue: #00d2ff;
-            --panel-glass: rgba(5, 12, 28, 0.85);
+            --panel-glass: rgba(5, 8, 16, 0.9);
             --border-glass: rgba(0, 210, 255, 0.15);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
-        body { font-family: 'Segoe UI', Roboto, sans-serif; background-color: #010206; color: #fff; overflow: hidden; width: 100vw; height: 100vh; }
+        body { font-family: 'Segoe UI', Roboto, sans-serif; background-color: #010103; color: #fff; overflow: hidden; width: 100vw; height: 100vh; }
         #viewport-container { position: relative; width: 100%; height: 100%; }
         #webcam { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
         canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 2; }
 
-        /* JARVIS HUD System */
-        .jarvis-hud { position: absolute; top: 25px; left: 25px; z-index: 10; display: flex; flex-direction: column; gap: 12px; pointer-events: none; }
-        .hud-card { background: var(--panel-glass); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid var(--border-glass); border-radius: 8px; padding: 14px 20px; box-shadow: 0 0 25px rgba(0, 210, 255, 0.1); min-width: 260px; }
-        .hud-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 3px; color: rgba(0, 210, 255, 0.6); margin-bottom: 6px; font-weight: 800; }
-        .hud-data { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; letter-spacing: 1px; }
-        .hud-data .value { font-weight: 700; color: #fff; text-shadow: 0 0 5px var(--jarvis-blue); }
+        /* Tactical Clean HUD */
+        .jarvis-hud { position: absolute; top: 30px; left: 30px; z-index: 10; display: flex; flex-direction: column; gap: 14px; pointer-events: none; }
+        .hud-card { background: var(--panel-glass); backdrop-filter: blur(25px); border: 1px solid var(--border-glass); border-radius: 6px; padding: 16px 24px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.8); min-width: 280px; }
+        .hud-title { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 4px; color: rgba(0, 210, 255, 0.5); margin-bottom: 8px; font-weight: 800; display: flex; align-items: center; gap: 8px;}
+        .hud-title::before { content: ''; width: 6px; height: 6px; background: var(--jarvis-blue); border-radius: 50%; box-shadow: 0 0 10px var(--jarvis-blue);}
+        .hud-data { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; letter-spacing: 2px; }
+        .hud-data .value { font-weight: 800; color: #fff; text-shadow: 0 0 8px var(--jarvis-blue); }
 
-        /* Interactive Arc Reactor Button (Floating Center-Bottom initially) */
+        /* Cinematic Arc Reactor Trigger */
         #arc-reactor-trigger {
-            position: absolute;
-            top: 70%; left: 50%; transform: translate(-50%, -50%);
-            width: 110px; height: 110px;
-            background: radial-gradient(circle, #fff 20%, rgba(0,210,255,0.2) 50%, transparent 70%);
-            border: 3px dashed var(--jarvis-blue); border-radius: 50%;
-            z-index: 30; cursor: pointer;
-            box-shadow: 0 0 40px rgba(0, 210, 255, 0.6);
-            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            position: absolute; top: 70%; left: 50%; transform: translate(-50%, -50%);
+            width: 120px; height: 120px;
+            background: radial-gradient(circle, #fff 10%, rgba(0,210,255,0.4) 40%, transparent 80%);
+            border: 2px solid rgba(0, 210, 255, 0.4); border-radius: 50%;
+            z-index: 30; cursor: pointer; box-shadow: 0 0 50px rgba(0, 210, 255, 0.5);
+            transition: all 0.6s cubic-bezier(0.2, 1, 0.3, 1);
             display: flex; align-items: center; justify-content: center;
         }
-        #arc-reactor-trigger::before {
-            content: 'MARK 85'; font-size: 0.6rem; letter-spacing: 2px; font-weight: 900; color: var(--jarvis-blue); text-shadow: 0 0 5px #fff;
-        }
-        #arc-reactor-trigger.deployed {
-            top: 80px; left: calc(100% - 80px); width: 65px; height: 65px; border-style: solid;
-        }
-        #arc-reactor-trigger.deployed::before { content: 'ONLINE'; font-size: 0.45rem; }
+        #arc-reactor-trigger::after { content: ''; position: absolute; inset: -10px; border: 1px dashed var(--jarvis-blue); border-radius: 50%; animation: spin 10s linear infinite; }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+        #arc-reactor-trigger::before { content: 'DEPLOY'; font-size: 0.7rem; letter-spacing: 3px; font-weight: 900; color: #fff; text-shadow: 0 0 10px var(--jarvis-blue); }
+        
+        #arc-reactor-trigger.deployed { top: 80px; left: calc(100% - 80px); width: 60px; height: 60px; border: 1px solid var(--jarvis-blue); background: rgba(0,210,255,0.1); }
+        #arc-reactor-trigger.deployed::before { content: 'SYS ON'; font-size: 0.4rem; }
+        #arc-reactor-trigger.deployed::after { display: none; }
 
-        /* Weapon Selection Panel */
+        /* Minimalist Weapon Console */
         #weapon-menu { 
-            position: absolute; bottom: 35px; left: 50%; transform: translateX(-50%); 
-            z-index: 20; display: flex; gap: 12px; padding: 10px; border-radius: 12px; 
-            pointer-events: auto; opacity: 0; transform: translate(-50%, 50px); transition: all 0.6s ease;
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%); 
+            z-index: 20; display: flex; gap: 16px; padding: 12px; border-radius: 8px; 
+            pointer-events: auto; opacity: 0; transform: translate(-50%, 50px); transition: all 0.5s ease;
+            background: var(--panel-glass); border: 1px solid rgba(255,255,255,0.05);
         }
         #weapon-menu.visible { opacity: 1; transform: translate(-50%, 0); }
         
         .btn-weapon { 
-            background: rgba(0, 210, 255, 0.03); border: 1px solid var(--border-glass); 
-            color: rgba(255, 255, 255, 0.6); padding: 12px 22px; border-radius: 4px; 
-            cursor: pointer; font-weight: 700; font-size: 0.75rem; letter-spacing: 2px; 
+            background: transparent; border: 1px solid transparent; 
+            color: rgba(255, 255, 255, 0.4); padding: 12px 26px; border-radius: 4px; 
+            cursor: pointer; font-weight: 800; font-size: 0.75rem; letter-spacing: 3px; 
             text-transform: uppercase; transition: all 0.3s ease; 
         }
-        .btn-weapon:hover { background: rgba(0, 210, 255, 0.1); color: #fff; }
+        .btn-weapon:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
         .btn-weapon.active { 
-            color: #fff; border-color: var(--stark-gold); 
-            background: rgba(241, 196, 15, 0.15); text-shadow: 0 0 8px var(--stark-gold); 
-            box-shadow: 0 0 15px rgba(241, 196, 15, 0.2);
+            color: #111; background: var(--jarvis-blue); box-shadow: 0 0 20px rgba(0, 210, 255, 0.4); 
         }
 
-        /* Initial Sync Overlay */
-        #gateway-overlay { position: absolute; inset: 0; background: radial-gradient(circle at center, #07132c 0%, #010206 100%); z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: opacity 0.5s ease; }
-        .void-title { font-size: 2.5rem; font-weight: 200; letter-spacing: 12px; margin-bottom: 5px; color: #ffffff; text-shadow: 0 0 20px rgba(0, 210, 255, 0.4); }
-        .sync-btn { padding: 18px 48px; font-size: 0.85rem; font-weight: 800; color: #fff; background: linear-gradient(45deg, #0055ff, #00d2ff); border: none; border-radius: 4px; cursor: pointer; letter-spacing: 3px; text-transform: uppercase; box-shadow: 0 0 30px rgba(0, 210, 255, 0.3); }
+        /* High-Contrast Sync Screen */
+        #gateway-overlay { position: absolute; inset: 0; background: #010103; z-index: 100; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: opacity 0.5s ease; }
+        .void-title { font-size: 3rem; font-weight: 200; letter-spacing: 16px; margin-bottom: 5px; color: #fff; }
+        .sync-btn { margin-top: 40px; padding: 20px 60px; font-size: 0.8rem; font-weight: 800; color: #010103; background: #fff; border: none; border-radius: 2px; cursor: pointer; letter-spacing: 4px; text-transform: uppercase; transition: all 0.3s ease; }
+        .sync-btn:hover { background: var(--jarvis-blue); box-shadow: 0 0 30px rgba(0, 210, 255, 0.4); }
         .hidden { opacity: 0; pointer-events: none; }
     </style>
 </head>
@@ -83,9 +82,9 @@
 
     <div id="viewport-container">
         <div id="gateway-overlay">
-            <h1 class="void-title">STARK INDUSTRIES</h1>
-            <p style="color: #3b4e70; margin-bottom: 40px; font-size: 0.8rem; letter-spacing: 4px; text-transform: uppercase;">Armor Tactical OS v85.2</p>
-            <button class="sync-btn" id="syncBtn">Connect Jarvis</button>
+            <h1 class="void-title">STARK OS</h1>
+            <p style="color: #444; font-size: 0.85rem; letter-spacing: 6px; text-transform: uppercase;">Mark 85 Nanotech Integration</p>
+            <button class="sync-btn" id="syncBtn">Initialize Link</button>
         </div>
 
         <video id="webcam" autoplay playsinline></video>
@@ -95,24 +94,23 @@
 
         <div class="jarvis-hud">
             <div class="hud-card">
-                <div class="hud-title">System Architecture</div>
-                <div class="hud-data"><span class="label" style="color:rgba(255,255,255,0.4)">Armor Status</span><span class="value" id="hud-suit-state" style="color: red;">STANDBY</span></div>
+                <div class="hud-title">Armor Status</div>
+                <div class="hud-data"><span class="label" style="color:#666">Chassis</span><span class="value" id="hud-suit-state" style="color: red;">OFFLINE</span></div>
             </div>
             <div class="hud-card">
-                <div class="hud-title">Helmet Interface</div>
-                <div class="hud-data"><span class="label" style="color:rgba(255,255,255,0.4)">Face Shield</span><span class="value" id="hud-helmet-state">SEALED</span></div>
+                <div class="hud-title">Faceplate</div>
+                <div class="hud-data"><span class="label" style="color:#666">Lock</span><span class="value" id="hud-helmet-state">RETRACTED</span></div>
             </div>
             <div class="hud-card">
-                <div class="hud-title">Active Nanotech Payload</div>
-                <div class="hud-data"><span class="label" style="color:rgba(255,255,255,0.4)">Weapon Call</span><span class="value" id="hud-weapon-state" style="color: var(--jarvis-blue);">NONE</span></div>
+                <div class="hud-title">Weapons</div>
+                <div class="hud-data"><span class="label" style="color:#666">Payload</span><span class="value" id="hud-weapon-state" style="color: var(--jarvis-blue);">NONE</span></div>
             </div>
         </div>
 
-        <div id="weapon-menu" class="hud-card">
-            <button class="btn-weapon active" data-weapon="repulsor">REPULSOR</button>
-            <button class="btn-weapon" data-weapon="laser">LASER BEAM</button>
-            <button class="btn-weapon" data-weapon="missile">MISSILES</button>
-            <button class="btn-weapon" data-weapon="shield">NANO SHIELD</button>
+        <div id="weapon-menu">
+            <button class="btn-weapon active" data-weapon="repulsor">Repulsors</button>
+            <button class="btn-weapon" data-weapon="missile">Missiles</button>
+            <button class="btn-weapon" data-weapon="laser">Laser</button>
         </div>
     </div>
 
@@ -123,24 +121,28 @@
         
         let width, height;
         let isSuitDeployed = false;
-        let isHelmetOpen = false;
+        let isHelmetOpen = true;
         let selectedWeapon = 'repulsor';
         
-        // Trackers Data Cache
-        let handLandmarksData = null;
-        let faceLandmarksData = null;
-        let blastwaves = [];
-        let particles = [];
+        // Holistic Data Trackers
+        let poseData = null;
+        let faceData = null;
+        let rightHandData = null;
+        let leftHandData = null;
+        
+        // VFX Arrays
+        let projectiles = [];
+        let repulsorBlasts = [];
         let missileCharge = 0;
 
-        function resize() {
+        function handleResize() {
             width = window.innerWidth; height = window.innerHeight;
             canvas.width = width; canvas.height = height;
         }
-        window.addEventListener('resize', resize);
-        resize();
+        window.addEventListener('resize', handleResize);
+        handleResize();
 
-        // Weapon Selector Handlers
+        // UI Interactions
         document.querySelectorAll('.btn-weapon').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.btn-weapon').forEach(b => b.classList.remove('active'));
@@ -150,225 +152,245 @@
             });
         });
 
-        // Click Event Listener on Canvas to check for Interactive Objects (Arc Reactor / Helmet Click)
         canvas.addEventListener('click', (e) => {
-            let clickX = e.clientX;
-            let clickY = e.clientY;
-
-            if (isSuitDeployed && faceLandmarksData) {
-                // Check if user clicked on their head region (Helmet Toggle area)
-                let noseBridge = faceLandmarksData[6]; // Nose bridge coordinate anchor
-                let hX = (1 - noseBridge.x) * width;
-                let hY = noseBridge.y * height;
-                let distToFace = Math.hypot(clickX - hX, clickY - hY);
-
-                if (distToFace < 160) {
+            if (isSuitDeployed && faceData) {
+                let nose = faceData[6];
+                let nX = (1 - nose.x) * width; let nY = nose.y * height;
+                if (Math.hypot(e.clientX - nX, e.clientY - nY) < 150) {
                     isHelmetOpen = !isHelmetOpen;
-                    document.getElementById('hud-helmet-state').innerText = isHelmetOpen ? "OPEN (FACE HUD)" : "SEALED";
-                    document.getElementById('hud-helmet-state').style.color = isHelmetOpen ? "var(--stark-gold)" : "#fff";
-                    return;
+                    document.getElementById('hud-helmet-state').innerText = isHelmetOpen ? "RETRACTED" : "SEALED";
+                    document.getElementById('hud-helmet-state').style.color = isHelmetOpen ? "var(--stark-gold)" : "#00ffaa";
                 }
             }
         });
 
-        // Center Arc Reactor Click Logic
         document.getElementById('arc-reactor-trigger').addEventListener('click', () => {
-            if (!isSuitDeployed) {
-                isSuitDeployed = true;
-                document.getElementById('arc-reactor-trigger').classList.add('deployed');
-                document.getElementById('weapon-menu').classList.add('visible');
-                document.getElementById('hud-suit-state').innerText = "MARK 85 ONLINE";
-                document.getElementById('hud-suit-state').style.color = "#00ffaa";
+            isSuitDeployed = !isSuitDeployed;
+            const trigger = document.getElementById('arc-reactor-trigger');
+            const menu = document.getElementById('weapon-menu');
+            const state = document.getElementById('hud-suit-state');
+            
+            if (isSuitDeployed) {
+                trigger.classList.add('deployed'); menu.classList.add('visible');
+                state.innerText = "MK-85 ONLINE"; state.style.color = "#00ffaa";
+                isHelmetOpen = false; document.getElementById('hud-helmet-state').innerText = "SEALED"; document.getElementById('hud-helmet-state').style.color = "#00ffaa";
             } else {
-                // Click to toggle off armor completely
-                isSuitDeployed = false;
-                isHelmetOpen = false;
-                document.getElementById('arc-reactor-trigger').classList.remove('deployed');
-                document.getElementById('weapon-menu').classList.remove('visible');
-                document.getElementById('hud-suit-state').innerText = "STANDBY";
-                document.getElementById('hud-suit-state').style.color = "red";
+                trigger.classList.remove('deployed'); menu.classList.remove('visible');
+                state.innerText = "OFFLINE"; state.style.color = "red";
+                isHelmetOpen = true; document.getElementById('hud-helmet-state').innerText = "RETRACTED"; document.getElementById('hud-helmet-state').style.color = "#fff";
             }
         });
 
         document.getElementById('syncBtn').addEventListener('click', () => {
             document.getElementById('gateway-overlay').classList.add('hidden');
-            startStarkOS();
+            bootHolisticEngine();
         });
 
-        function addSpark(x, y, color, vx, vy) {
-            particles.push({ x, y, vx, vy, alpha: 1, size: Math.random() * 3 + 1.5, color });
+        // Realistic Metallic Shader Generator
+        function getMetallicGradient(x1, y1, x2, y2, type) {
+            let grad = ctx.createLinearGradient(x1, y1, x2, y2);
+            if(type === 'red') {
+                grad.addColorStop(0, '#5a0000'); grad.addColorStop(0.5, '#c0392b'); grad.addColorStop(1, '#3a0000');
+            } else if(type === 'gold') {
+                grad.addColorStop(0, '#8a6a00'); grad.addColorStop(0.5, '#f1c40f'); grad.addColorStop(1, '#5a4500');
+            }
+            return grad;
         }
 
-        // DYNAMIC MAIN COMPUTATION LOOP
-        function drawFramePipeline() {
+        // --- MASTER RENDER PIPELINE ---
+        function onHolisticResults(results) {
             ctx.clearRect(0, 0, width, height);
 
-            // Draw Webcam Feed Background
             ctx.save(); ctx.translate(width, 0); ctx.scale(-1, 1);
-            ctx.filter = "brightness(0.55) contrast(1.1)";
-            ctx.drawImage(video, 0, 0, width, height);
+            ctx.filter = "brightness(0.6) contrast(1.2) grayscale(0.2)";
+            ctx.drawImage(results.image, 0, 0, width, height);
             ctx.restore();
 
-            // 1. FACE MESH RENDER PIPELINE (Iron Man Helmet Overlay)
-            if (isSuitDeployed && faceLandmarksData) {
-                // Calculate essential facial structure anchors
-                let leftEye = faceLandmarksData[33];
-                let rightEye = faceLandmarksData[263];
-                let chin = faceLandmarksData[152];
-                let forehead = faceLandmarksData[10];
+            poseData = results.poseLandmarks;
+            faceData = results.faceLandmarks;
+            leftHandData = results.leftHandLandmarks; // user's actual right hand mirrored
+            rightHandData = results.rightHandLandmarks; // user's actual left hand mirrored
 
-                let fX = (1 - faceLandmarksData[6].x) * width;
-                let fY = faceLandmarksData[6].y * height;
-                let faceWidth = Math.hypot((1-leftEye.x)*width - (1-rightEye.x)*width, leftEye.y*height - rightEye.y*height) * 2.2;
-                let faceHeight = Math.hypot(forehead.x*width - chin.x*width, forehead.y*height - chin.y*height) * 1.3;
-
-                ctx.save();
-                if (!isHelmetOpen) {
-                    // Draw Sealed Crimson Red & Metallic Gold Helmet Face Shield Overlay
-                    ctx.fillStyle = "rgba(192, 57, 43, 0.95)";
-                    ctx.strokeStyle = "var(--stark-gold)";
-                    ctx.lineWidth = 4;
-                    ctx.shadowBlur = 20; ctx.shadowColor = "rgba(192, 57, 43, 0.5)";
+            if (isSuitDeployed) {
+                // 1. RENDER CHEST & SHOULDERS (POSE DATA)
+                if (poseData) {
+                    let lShoulder = { x: (1 - poseData[12].x) * width, y: poseData[12].y * height };
+                    let rShoulder = { x: (1 - poseData[11].x) * width, y: poseData[11].y * height };
+                    let lElbow = { x: (1 - poseData[14].x) * width, y: poseData[14].y * height };
+                    let rElbow = { x: (1 - poseData[13].x) * width, y: poseData[13].y * height };
                     
-                    // Draw procedural mechanical helmet contours mapped onto face mesh landmarks
+                    let midX = (lShoulder.x + rShoulder.x) / 2;
+                    let midY = (lShoulder.y + rShoulder.y) / 2 + 50; // Arc reactor position
+
+                    // Draw Unibody Chest Plate
+                    ctx.fillStyle = getMetallicGradient(lShoulder.x, lShoulder.y, rShoulder.x, rShoulder.y, 'red');
+                    ctx.strokeStyle = getMetallicGradient(lShoulder.x, lShoulder.y, rShoulder.x, rShoulder.y, 'gold');
+                    ctx.lineWidth = 6; ctx.lineJoin = "round";
                     ctx.beginPath();
-                    ctx.arc(fX, fY - 10, faceWidth * 0.5, 0, Math.PI * 2);
-                    ctx.fill(); ctx.stroke();
+                    ctx.moveTo(lShoulder.x - 40, lShoulder.y - 20);
+                    ctx.lineTo(rShoulder.x + 40, rShoulder.y - 20);
+                    ctx.lineTo(rShoulder.x + 20, rShoulder.y + 180);
+                    ctx.lineTo(lShoulder.x - 20, lShoulder.y + 180);
+                    ctx.closePath(); ctx.fill(); ctx.stroke();
 
-                    // Glowing Arc Cybernetic Blue Eyes Slot
-                    ctx.fillStyle = "#fff"; ctx.shadowColor = "var(--jarvis-blue)"; ctx.shadowBlur = 15;
-                    let lX = (1 - leftEye.x) * width; let lY = leftEye.y * height;
-                    let rX = (1 - rightEye.x) * width; let rY = rightEye.y * height;
-                    ctx.fillRect(lX - 25, lY - 6, 40, 8);
-                    ctx.fillRect(rX - 15, rY - 6, 40, 8);
-                } else {
-                    // Draw Open Helmet Framework borders around the user face
-                    ctx.strokeStyle = "rgba(192, 57, 43, 0.8)"; ctx.lineWidth = 6;
-                    ctx.strokeRect(fX - (faceWidth*0.55), fY - (faceHeight*0.55), faceWidth * 1.1, faceHeight * 1.1);
+                    // Draw Glowing Arc Reactor on Chest
+                    let arcGrad = ctx.createRadialGradient(midX, midY, 5, midX, midY, 35);
+                    arcGrad.addColorStop(0, '#ffffff'); arcGrad.addColorStop(0.3, '#00d2ff'); arcGrad.addColorStop(1, 'transparent');
+                    ctx.save(); ctx.shadowBlur = 40; ctx.shadowColor = "var(--jarvis-blue)";
+                    ctx.fillStyle = arcGrad; ctx.beginPath(); ctx.arc(midX, midY, 35, 0, Math.PI*2); ctx.fill();
                     
-                    // Add holographic face tracking targeting overlay metrics
-                    ctx.strokeStyle = "rgba(0, 210, 255, 0.4)"; ctx.lineWidth = 1;
-                    ctx.beginPath(); ctx.arc(fX, fY, faceWidth * 0.4, 0, Math.PI*2); ctx.stroke();
-                    ctx.fillStyle = "rgba(0,210,255,0.7)"; font = "10px monospace";
-                    ctx.fillText("TARGET LOCK: TONY STARK", fX - 60, fY - faceHeight*0.4);
+                    ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(midX-20, midY); ctx.lineTo(midX+20, midY); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(midX, midY-20); ctx.lineTo(midX, midY+20); ctx.stroke();
+                    ctx.restore();
+
+                    // Draw Arm Armor Sections (Shoulder to Elbow)
+                    ctx.lineWidth = 35; ctx.lineCap = "round";
+                    ctx.strokeStyle = getMetallicGradient(lShoulder.x, lShoulder.y, lElbow.x, lElbow.y, 'red');
+                    ctx.beginPath(); ctx.moveTo(lShoulder.x, lShoulder.y); ctx.lineTo(lElbow.x, lElbow.y); ctx.stroke();
+                    ctx.strokeStyle = getMetallicGradient(rShoulder.x, rShoulder.y, rElbow.x, rElbow.y, 'red');
+                    ctx.beginPath(); ctx.moveTo(rShoulder.x, rShoulder.y); ctx.lineTo(rElbow.x, rElbow.y); ctx.stroke();
                 }
-                ctx.restore();
-            }
 
-            // 2. HAND LANDMARKS WEAPON MATRIX RENDER PIPELINE
-            if (isSuitDeployed && handLandmarksData) {
-                let wrist = handLandmarksData[0];
-                let indexTip = handLandmarksData[8];
-                let pinkyTip = handLandmarksData[20];
-                let thumbTip = handLandmarksData[4];
+                // 2. RENDER HELMET (FACE DATA)
+                if (faceData) {
+                    let nose = { x: (1 - faceData[6].x) * width, y: faceData[6].y * height };
+                    let leftEye = { x: (1 - faceData[33].x) * width, y: faceData[33].y * height };
+                    let rightEye = { x: (1 - faceData[263].x) * width, y: faceData[263].y * height };
+                    let faceWidth = Math.hypot(leftEye.x - rightEye.x, leftEye.y - rightEye.y) * 2.5;
 
-                let wX = (1 - wrist.x) * width; let wY = wrist.y * height;
-                let iX = (1 - indexTip.x) * width; let iY = indexTip.y * height;
-
-                // Read posture state to trigger blasts
-                let handSpan = Math.hypot(indexTip.x - pinkyTip.x, indexTip.y - pinkyTip.y);
-                let isOpenPalm = handSpan > 0.25;
-                let isPinching = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y) < 0.04;
-
-                if (selectedWeapon === 'repulsor') {
-                    // Palm center energy core configuration
-                    let pX = (wX + iX) / 2; let pY = (wY + iY) / 2;
-                    let repulsorSize = isOpenPalm ? 50 : 25;
-                    let coreGrad = ctx.createRadialGradient(pX, pY, 2, pX, pY, repulsorSize);
-                    coreGrad.addColorStop(0, '#fff'); coreGrad.addColorStop(0.3, 'rgba(0,210,255,1)'); coreGrad.addColorStop(1, 'transparent');
-                    
-                    ctx.save(); ctx.shadowBlur = 30; ctx.shadowColor = "var(--jarvis-blue)";
-                    ctx.fillStyle = coreGrad; ctx.beginPath(); ctx.arc(pX, pY, repulsorSize, 0, Math.PI*2); ctx.fill(); ctx.restore();
-
-                    if (isOpenPalm && Math.random() > 0.7) {
-                        blastwaves.push({ x: pX, y: pY, radius: 10, maxRadius: 280, color: "var(--jarvis-blue)", opacity: 1 });
-                    }
-                } 
-                else if (selectedWeapon === 'laser') {
-                    // Continuous cutting edge particle laser stream out of hand fingertips
-                    ctx.save(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 8;
-                    ctx.shadowBlur = 25; ctx.shadowColor = "red";
-                    ctx.beginPath(); ctx.moveTo(iX, iY); ctx.lineTo(iX, 0); ctx.stroke(); ctx.restore();
-
-                    for(let l=0; l<3; l++) addSpark(iX, iY - Math.random()*20, 'red', (Math.random()-0.5)*4, -5);
-                } 
-                else if (selectedWeapon === 'missile') {
-                    // Nanotech micro-missile arrays logic
-                    if (isPinching) {
-                        missileCharge = Math.min(missileCharge + 2, 100);
+                    if (!isHelmetOpen) {
+                        ctx.fillStyle = getMetallicGradient(nose.x - faceWidth, nose.y, nose.x + faceWidth, nose.y, 'red');
+                        ctx.strokeStyle = getMetallicGradient(nose.x, nose.y-100, nose.x, nose.y+100, 'gold');
+                        ctx.lineWidth = 4; ctx.shadowBlur = 10; ctx.shadowColor = "#000";
+                        
+                        ctx.beginPath(); ctx.arc(nose.x, nose.y, faceWidth * 0.6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                        
+                        // Glowing Eyes
+                        ctx.shadowBlur = 20; ctx.shadowColor = "var(--jarvis-blue)"; ctx.fillStyle = "#fff";
+                        ctx.fillRect(leftEye.x - 20, leftEye.y - 5, 35, 8);
+                        ctx.fillRect(rightEye.x - 15, rightEye.y - 5, 35, 8);
+                        ctx.shadowBlur = 0;
                     } else {
-                        if (missileCharge > 30) {
-                            // Fire barrage projectile sparks upward!
-                            for (let m = 0; m < 8; m++) {
-                                addSpark(iX, iY, "var(--stark-gold)", (Math.random()-0.5)*12, -8 - Math.random()*8);
+                        // Open HUD overlay tracking
+                        ctx.strokeStyle = "rgba(0, 210, 255, 0.5)"; ctx.lineWidth = 1;
+                        ctx.strokeRect(nose.x - faceWidth*0.6, nose.y - faceWidth*0.7, faceWidth*1.2, faceWidth*1.4);
+                        ctx.fillStyle = "rgba(0, 210, 255, 0.8)"; ctx.font = "10px monospace";
+                        ctx.fillText("BIOMETRIC LOCK: ACTIVE", nose.x - 50, nose.y - faceWidth*0.8);
+                    }
+                }
+
+                // 3. RENDER WEAPONS & HANDS (HAND DATA)
+                [leftHandData, rightHandData].forEach((hand) => {
+                    if (hand) {
+                        let wrist = { x: (1 - hand[0].x) * width, y: hand[0].y * height };
+                        let indexTip = { x: (1 - hand[8].x) * width, y: hand[8].y * height };
+                        let thumbTip = { x: (1 - hand[4].x) * width, y: hand[4].y * height };
+                        let pinkyTip = { x: (1 - hand[20].x) * width, y: hand[20].y * height };
+                        
+                        let pX = (wrist.x + indexTip.x) / 2; let pY = (wrist.y + indexTip.y) / 2;
+                        let isOpenPalm = Math.hypot(indexTip.x - pinkyTip.x, indexTip.y - pinkyTip.y) > 80;
+                        let isPinching = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y) < 40;
+
+                        // Hand Gauntlet Base Armor
+                        ctx.fillStyle = getMetallicGradient(wrist.x, wrist.y, indexTip.x, indexTip.y, 'red');
+                        ctx.beginPath(); ctx.arc(pX, pY, 35, 0, Math.PI*2); ctx.fill();
+
+                        if (selectedWeapon === 'repulsor') {
+                            let coreRad = isOpenPalm ? 35 : 15;
+                            let g = ctx.createRadialGradient(pX, pY, 2, pX, pY, coreRad);
+                            g.addColorStop(0, '#fff'); g.addColorStop(0.4, 'var(--jarvis-blue)'); g.addColorStop(1, 'transparent');
+                            ctx.save(); ctx.shadowBlur = 30; ctx.shadowColor = "var(--jarvis-blue)"; ctx.fillStyle = g;
+                            ctx.beginPath(); ctx.arc(pX, pY, coreRad, 0, Math.PI*2); ctx.fill(); ctx.restore();
+
+                            if (isOpenPalm && Math.random() > 0.8) {
+                                repulsorBlasts.push({x: pX, y: pY, rad: 10, op: 1});
                             }
-                            blastwaves.push({ x: iX, y: iY, radius: 5, maxRadius: 120, color: "var(--stark-gold)", opacity: 1 });
+                        } 
+                        else if (selectedWeapon === 'laser') {
+                            ctx.save(); ctx.strokeStyle = "#fff"; ctx.lineWidth = 10;
+                            ctx.shadowBlur = 30; ctx.shadowColor = "red";
+                            ctx.beginPath(); ctx.moveTo(indexTip.x, indexTip.y); ctx.lineTo(indexTip.x, 0); ctx.stroke();
+                            
+                            // Core inner laser beam
+                            ctx.strokeStyle = "rgba(255, 100, 100, 0.5)"; ctx.lineWidth = 16;
+                            ctx.beginPath(); ctx.moveTo(indexTip.x, indexTip.y); ctx.lineTo(indexTip.x, 0); ctx.stroke(); ctx.restore();
                         }
-                        missileCharge = 0;
+                        else if (selectedWeapon === 'missile' && poseData) {
+                            // REALISTIC SHOULDER MISSILES LAUNCH LOGIC
+                            let shoulderLaunchPad = (wrist.x < width/2) ? { x: (1 - poseData[12].x) * width, y: poseData[12].y * height } : { x: (1 - poseData[11].x) * width, y: poseData[11].y * height };
+
+                            if (isPinching) {
+                                missileCharge = Math.min(missileCharge + 3, 100);
+                                // Draw targeting HUD near hand
+                                ctx.fillStyle = "var(--stark-gold)"; ctx.fillRect(indexTip.x - 20, indexTip.y - 30, 40, 5);
+                                ctx.fillStyle = "#fff"; ctx.font = "10px monospace"; ctx.fillText(`TARGET: ${Math.round(missileCharge)}%`, indexTip.x - 25, indexTip.y - 40);
+                            } else {
+                                if (missileCharge > 40) {
+                                    // LAUNCH REALISTIC MISSILES FROM SHOULDERS UPWARDS
+                                    for(let m=0; m<4; m++) {
+                                        projectiles.push({
+                                            x: shoulderLaunchPad.x + (Math.random()-0.5)*40, 
+                                            y: shoulderLaunchPad.y - 20,
+                                            vx: (Math.random()-0.5)*4, vy: -12 - Math.random()*5,
+                                            life: 1, type: 'missile'
+                                        });
+                                    }
+                                }
+                                missileCharge = 0;
+                            }
+                        }
                     }
-                    ctx.fillStyle = "var(--stark-gold)";
-                    ctx.fillRect(iX - 20, iY - 35, 40, 8);
-                    ctx.fillStyle = "#fff"; ctx.font = "9px sans-serif";
-                    ctx.fillText("MISSILE LOCK: " + Math.round(missileCharge) + "%", iX - 35, iY - 45);
-                } 
-                else if (selectedWeapon === 'shield') {
-                    // Mapped glowing hexagonal nano defensive shield array
-                    ctx.save(); ctx.strokeStyle = "rgba(0, 210, 255, 0.7)"; ctx.lineWidth = 3;
-                    ctx.fillStyle = "rgba(0, 210, 255, 0.15)"; ctx.shadowBlur = 20; ctx.shadowColor = "var(--jarvis-blue)";
-                    ctx.beginPath();
-                    for(let s=0; s<6; s++) {
-                        let rad = (Math.PI / 3) * s;
-                        let sX = iX + Math.cos(rad) * 90; let sY = iY + Math.sin(rad) * 90;
-                        if(s===0) ctx.moveTo(sX, sY); else ctx.lineTo(sX, sY);
-                    }
-                    ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
-                }
+                });
             }
 
-            // 3. ANIMATE AND RENDER BLASTWAVES PIPELINE
-            for (let b = blastwaves.length - 1; b >= 0; b--) {
-                let bl = blastwaves[b]; bl.radius += 14; bl.opacity -= 0.04;
-                if (bl.opacity <= 0) { blastwaves.splice(b, 1); } 
+            // 4. ANIMATE VFX PIPELINE
+            // Repulsor Blastwaves
+            for (let i = repulsorBlasts.length-1; i>=0; i--) {
+                let r = repulsorBlasts[i]; r.rad += 15; r.op -= 0.05;
+                if(r.op <= 0) { repulsorBlasts.splice(i, 1); } 
                 else {
-                    ctx.save(); ctx.globalAlpha = bl.opacity; ctx.strokeStyle = bl.color; ctx.lineWidth = 4;
-                    ctx.beginPath(); ctx.arc(bl.x, bl.y, bl.radius, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+                    ctx.save(); ctx.globalAlpha = r.op; ctx.strokeStyle = "var(--jarvis-blue)"; ctx.lineWidth = 5;
+                    ctx.beginPath(); ctx.arc(r.x, r.y, r.rad, 0, Math.PI*2); ctx.stroke(); ctx.restore();
                 }
             }
 
-            // 4. ANIMATE AND RENDER PROJECTILE SPARKS VECTOR PIPELINE
-            for (let p = particles.length - 1; p >= 0; p--) {
-                let pt = particles[p]; pt.x += pt.vx; pt.y += pt.vy; pt.alpha -= 0.03;
-                if (pt.alpha <= 0) { particles.splice(p, 1); } 
+            // Shoulder Missiles with Cinematic Smoke Trails
+            for (let i = projectiles.length-1; i>=0; i--) {
+                let p = projectiles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.02;
+                if(p.life <= 0) { projectiles.splice(i, 1); }
                 else {
-                    ctx.save(); ctx.globalAlpha = pt.alpha; ctx.fillStyle = pt.color;
-                    ctx.beginPath(); ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI*2); ctx.fill(); ctx.restore();
+                    // Draw Missle Head
+                    ctx.fillStyle = "#fff"; ctx.shadowBlur = 15; ctx.shadowColor = "#ffaa00";
+                    ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill(); ctx.shadowBlur = 0;
+                    
+                    // Draw Orange/Grey Smoke Trail
+                    ctx.fillStyle = `rgba(255, 100, 0, ${p.life})`;
+                    ctx.beginPath(); ctx.arc(p.x, p.y + 10, 6, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = `rgba(100, 100, 100, ${p.life*0.5})`;
+                    ctx.beginPath(); ctx.arc(p.x, p.y + 20, 8, 0, Math.PI*2); ctx.fill();
                 }
             }
-
-            requestAnimationFrame(drawFramePipeline);
         }
 
-        // INITIALIZE SIMULTANEOUS MULTI-TRACKING CHANNELS
-        function startStarkOS() {
-            // Setup Hands Infrastructure Channel
-            const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-            hands.setOptions({ maxNumHands: 1, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-            hands.onResults(results => { handLandmarksData = (results.multiHandLandmarks) ? results.multiHandLandmarks[0] : null; });
-
-            // Setup Face Mesh Infrastructure Channel
-            const faceMesh = new FaceMesh({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}` });
-            faceMesh.setOptions({ maxNumFaces: 1, refineLandmarks: false, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
-            faceMesh.onResults(results => { faceLandmarksData = (results.multiFaceLandmarks) ? results.multiFaceLandmarks[0] : null; });
+        // INITIALIZE HOLISTIC ENGINE
+        function bootHolisticEngine() {
+            const holistic = new Holistic({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/holistic/${file}` });
+            holistic.setOptions({
+                modelComplexity: 1,
+                smoothLandmarks: true,
+                enableSegmentation: false,
+                refineFaceLandmarks: false,
+                minDetectionConfidence: 0.55,
+                minTrackingConfidence: 0.55
+            });
+            holistic.onResults(onHolisticResults);
 
             const camera = new Camera(video, {
-                onFrame: async () => {
-                    await hands.send({ image: video });
-                    await faceMesh.send({ image: video });
-                },
+                onFrame: async () => { await holistic.send({ image: video }); },
                 width: 1280, height: 720
             });
             camera.start();
-            requestAnimationFrame(drawFramePipeline);
         }
     </script>
 </body>
