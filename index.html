@@ -80,8 +80,8 @@
     </div>
 
     <div id="status-container" class="sys-msg">
-        <div class="text-3xl font-black tracking-[0.7em] text-white drop-shadow-[0_0_12px_#00ffff]">MARK 85 ARCHITECTURE</div>
-        <div id="sync-status" class="text-xs mt-4 text-cyan-400 tracking-widest uppercase animate-pulse">// SYSTEM DISCONNECTED // AWAITING NEURAL SYNAPSE</div>
+        <div class="text-3xl font-black tracking-[0.7em] text-white drop-shadow-[0_0_12px_#00ffff]">MARK 85 NEXUS</div>
+        <div id="sync-status" class="text-xs mt-4 text-cyan-400 tracking-widest uppercase animate-pulse">// SYSTEM ONLINE // AWAITING NEURAL LINK</div>
     </div>
 
     <div id="main-hud" class="hud-ui">
@@ -103,7 +103,7 @@
                     </div>
                     <div class="flex-1">
                         <div class="text-[11px] text-cyan-400 font-black tracking-widest uppercase flex justify-between">
-                            <span>F.R.I.D.A.Y. v5.0</span>
+                            <span>F.R.I.D.A.Y. v6.0</span>
                             <span class="text-[9px] text-cyan-600 font-mono" id="voice-indicator">STDBY</span>
                         </div>
                         <div id="friday-speech-text" class="text-xs text-white/90 mt-1.5 italic font-sans leading-relaxed transition-all duration-300">
@@ -126,7 +126,7 @@
             </div>
             
             <div id="flight-panel" class="hidden text-right font-mono bg-black/50 p-3 border border-orange-500/50 rounded-lg shadow-[0_0_15px_rgba(255,165,0,0.2)]">
-                <div class="text-[10px] tracking-widest text-orange-400 font-bold mb-1 animate-pulse">FLIGHT BOOSTERS: ENGAGED</div>
+                <div class="text-[10px] tracking-widest text-orange-400 font-bold mb-1 animate-pulse">VECTOR BOOSTERS: ENGAGED</div>
                 <div class="text-[9px] text-cyan-400">ALTITUDE: <span class="text-white">AUTO_NAV</span></div>
                 <div class="text-[9px] text-cyan-400">THRUST VECTORS: <span class="text-white">STABILIZED</span></div>
             </div>
@@ -138,14 +138,14 @@
                 <div class="mt-2 text-cyan-500 font-mono text-[10px]">
                     <span class="text-white">> "Run health scan" / "Check biometrics"</span><br>
                     <span class="text-white">> "Unibeam" / "Blast them"</span><br>
-                    <span class="text-white">> "How are you Friday" / "Status report"</span>
+                    <span class="text-white">> "How are you Friday" / "Status report" / "Reload missiles" / "Analyze this"</span>
                 </div>
             </div>
             
             <div id="weapon-panel" class="text-right border-r-4 border-cyan-400 pr-4 bg-black/60 backdrop-blur-md py-4 pl-12 rounded-l-md border-b border-cyan-900/30">
                 <div class="text-[10px] text-cyan-500 tracking-widest mb-1 font-bold uppercase">Micro-Missile Allocation</div>
                 <div id="missile-count" class="text-5xl font-black text-white drop-shadow-[0_0_12px_#00ffff]">24</div>
-                <div id="weapon-status" class="text-[9px] text-cyan-400 tracking-widest mt-1.5 uppercase font-mono">ORDNANCE STACK READY</div>
+                <div id="weapon-status" class="text-[9px] text-cyan-400 tracking-widest mt-1.5 uppercase font-mono">ORDNANCE STACK ONLINE</div>
             </div>
         </div>
     </div>
@@ -156,8 +156,12 @@
         const ctx = canvas.getContext('2d', { alpha: false });
         const overlayCanvas = document.querySelector('.overlay_canvas');
         const overlayCtx = overlayCanvas.getContext('2d');
-        
+
         const MAX_MISSILES = 24;
+        const GEMINI_API_KEY = "AIzaSyBOwrEPdqKVBFjvsTYbP5E8pqNPFaPWPig";
+        const GEMINI_MODEL = "gemini-3.1-flash-lite";
+        const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
+
         let isSuitedUp = false;
         let isDetecting = false;
         let missiles = MAX_MISSILES;
@@ -175,18 +179,18 @@
         let recognition;
         let isFridaySpeaking = false;
         let speechQueue = [];
+        let voicesReady = false;
+        let preferredFemaleVoice = null;
+        let visionBusy = false;
+        let armedOnce = false;
 
-function addLog(msg) {
+        function addLog(msg) {
             const feed = document.getElementById('log-feed');
             const log = document.createElement('div');
             log.innerText = `[${new Date().toLocaleTimeString().split(' ')[0]}] ${msg}`;
             feed.appendChild(log);
-            if(feed.children.length > 7) feed.removeChild(feed.children[0]);
+            if (feed.children.length > 7) feed.removeChild(feed.children[0]);
         }
-
-        const GEMINI_API_KEY = "AIzaSyBOwrEPdqKVBFjvsTYbP5E8pqNPFaPWPig";
-        const GEMINI_MODEL = "gemini-3.1-pro-preview";
-        const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
         function sanitizeEnglishResponse(text) {
             if (!text) return "";
@@ -222,23 +226,23 @@ function addLog(msg) {
 
         function spawnParticles(x, y, count = 12, palette = ['#00ffff', '#ffffff']) {
             for (let i = 0; i < count; i++) {
-                if (particles.length > 180) particles.shift();
+                if (particles.length > 240) particles.shift();
                 const angle = Math.random() * Math.PI * 2;
-                const speed = 0.6 + Math.random() * 2.4;
+                const speed = 0.5 + Math.random() * 2.8;
                 particles.push({
                     x, y,
                     vx: Math.cos(angle) * speed,
                     vy: Math.sin(angle) * speed,
-                    life: 30 + Math.random() * 18,
-                    maxLife: 30 + Math.random() * 18,
-                    size: 1.5 + Math.random() * 2.5,
+                    life: 28 + Math.random() * 22,
+                    maxLife: 28 + Math.random() * 22,
+                    size: 1.2 + Math.random() * 2.6,
                     color: palette[Math.floor(Math.random() * palette.length)]
                 });
             }
         }
 
         function spawnRipple(x, y, color = '#00ffff') {
-            ripples.push({ x, y, radius: 0, maxRadius: 170, alpha: 0.8, color });
+            ripples.push({ x, y, radius: 0, maxRadius: 180, alpha: 0.82, color });
             if (ripples.length > 18) ripples.shift();
         }
 
@@ -249,7 +253,7 @@ function addLog(msg) {
             const tag = document.createElement('div');
             tag.className = 'absolute px-3 py-1 rounded-full text-[10px] font-black tracking-[0.35em] uppercase border backdrop-blur-md';
             tag.style.left = '50%';
-            tag.style.top = '15%';
+            tag.style.top = '14%';
             tag.style.transform = 'translate(-50%, 0)';
             tag.style.color = color;
             tag.style.borderColor = color;
@@ -262,7 +266,7 @@ function addLog(msg) {
                 tag.style.opacity = '0';
                 tag.style.transform = 'translate(-50%, -10px)';
                 setTimeout(() => tag.remove(), 240);
-            }, 700);
+            }, 650);
         }
 
         function flashCenterPulse(color = '#00ffff') {
@@ -281,7 +285,7 @@ function addLog(msg) {
             const start = performance.now();
             const tick = (now) => {
                 const t = Math.min(1, (now - start) / 450);
-                const scale = 1 + t * 10;
+                const scale = 1 + t * 10.5;
                 pulse.style.transform = `translate(-50%, -50%) scale(${scale})`;
                 pulse.style.opacity = String(0.95 * (1 - t));
                 if (t < 1) requestAnimationFrame(tick);
@@ -297,8 +301,8 @@ function addLog(msg) {
                 const p = particles[i];
                 p.x += p.vx;
                 p.y += p.vy;
-                p.vx *= 0.985;
-                p.vy *= 0.985;
+                p.vx *= 0.986;
+                p.vy *= 0.986;
                 p.life -= 1;
 
                 const alpha = Math.max(0, p.life / p.maxLife);
@@ -315,8 +319,8 @@ function addLog(msg) {
 
             for (let i = ripples.length - 1; i >= 0; i--) {
                 const r = ripples[i];
-                r.radius += 5.5;
-                r.alpha *= 0.965;
+                r.radius += 5.7;
+                r.alpha *= 0.964;
                 overlayCtx.globalAlpha = r.alpha;
                 overlayCtx.beginPath();
                 overlayCtx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
@@ -336,18 +340,33 @@ function addLog(msg) {
         function refillMissiles(announce = true) {
             missiles = MAX_MISSILES;
             syncMissileUI();
-            setWeaponStatus('ORDNANCE STACK READY', false);
+            setWeaponStatus('ORDNANCE STACK ONLINE', false);
 
-            const panel = document.getElementById('weapon-panel');
-            const rect = panel.getBoundingClientRect();
+            const rect = document.getElementById('weapon-panel').getBoundingClientRect();
             const cx = rect.left + rect.width / 2;
             const cy = rect.top + rect.height / 2;
-            spawnParticles(cx, cy, 30, ['#ffffff', '#00ffff', '#7dd3fc']);
+            spawnParticles(cx, cy, 34, ['#ffffff', '#00ffff', '#7dd3fc']);
             spawnRipple(cx, cy, '#00ffff');
             triggerFxLabel('MISSILES RELOADED', '#00ffff');
 
             if (announce) {
-                fridaySpeak("Missile bay reloaded. Full ordnance capacity restored.");
+                fridaySpeak("Missile bay reloaded. Full ordnance capacity restored.", true);
+            }
+        }
+
+        function getVideoFrameBase64() {
+            try {
+                const temp = document.createElement('canvas');
+                const width = video.videoWidth || canvas.width || 1280;
+                const height = video.videoHeight || canvas.height || 720;
+                temp.width = width;
+                temp.height = height;
+                const tctx = temp.getContext('2d');
+                tctx.drawImage(video, 0, 0, width, height);
+                return temp.toDataURL('image/jpeg', 0.72).split(',')[1];
+            } catch (e) {
+                console.error('Frame capture failed:', e);
+                return "";
             }
         }
 
@@ -378,7 +397,8 @@ ${userText}
                         generationConfig: {
                             temperature: 0.2,
                             topP: 0.9,
-                            maxOutputTokens: 220
+                            maxOutputTokens: 220,
+                            thinkingConfig: { thinkingLevel: "low" }
                         }
                     })
                 });
@@ -390,6 +410,90 @@ ${userText}
                 console.error('Gemini error:', error);
                 return "";
             }
+        }
+
+        async function analyzeSceneWithGemini(userText) {
+            if (visionBusy) return "Vision analysis is already running.";
+            visionBusy = true;
+            document.getElementById('sync-status').innerText = "// VISION ARRAY ACTIVE // ANALYZING FRAME...";
+
+            try {
+                const imageBase64 = getVideoFrameBase64();
+                if (!imageBase64) {
+                    return "I could not capture a clear frame. Move the object closer to the camera and try again.";
+                }
+
+                const prompt = `
+You are F.R.I.D.A.Y. inside a futuristic HUD.
+Analyze the image carefully and answer in English only.
+The user wants to identify objects, surroundings, text, or any visible items in front of the camera.
+Be specific, concise, and honest. If the image is unclear, say so.
+If the object is visible, identify what it most likely is and mention key visual clues.
+User request: ${userText}
+`;
+                const res = await fetch(GEMINI_ENDPOINT, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': GEMINI_API_KEY
+                    },
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [
+                                { text: prompt },
+                                {
+                                    inline_data: {
+                                        mime_type: 'image/jpeg',
+                                        data: imageBase64
+                                    }
+                                }
+                            ]
+                        }],
+                        generationConfig: {
+                            temperature: 0.15,
+                            topP: 0.9,
+                            maxOutputTokens: 260,
+                            thinkingConfig: { thinkingLevel: "low" }
+                        }
+                    })
+                });
+
+                const data = await res.json();
+                const raw = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join(' ').trim();
+                return sanitizeEnglishResponse(raw || "") || "I could not analyze the scene clearly.";
+            } catch (error) {
+                console.error('Vision error:', error);
+                return "The vision engine hit an error while analyzing the scene.";
+            } finally {
+                visionBusy = false;
+                document.getElementById('sync-status').innerText = isSuitedUp
+                    ? "// NEURAL LINK ESTABLISHED // READY FOR COMMANDS"
+                    : "// SYSTEM ONLINE // AWAITING NEURAL LINK";
+            }
+        }
+
+        function getPreferredFemaleVoice() {
+            const voices = window.speechSynthesis?.getVoices?.() || [];
+            if (!voices.length) return null;
+
+            const femaleHints = [
+                'female', 'samantha', 'victoria', 'aria', 'karen', 'zira', 'google uk english female',
+                'google us english', 'microsoft aria', 'microsoft zira', 'siri', 'susan', 'ava', 'emma'
+            ];
+
+            return voices.find(v => femaleHints.some(h =>
+                v.name.toLowerCase().includes(h) || v.lang.toLowerCase().includes(h)
+            )) || voices.find(v => /en/i.test(v.lang)) || voices[0] || null;
+        }
+
+        function refreshVoices() {
+            preferredFemaleVoice = getPreferredFemaleVoice();
+            voicesReady = true;
+        }
+
+        if ('speechSynthesis' in window) {
+            refreshVoices();
+            window.speechSynthesis.onvoiceschanged = refreshVoices;
         }
 
         function updateVoiceIndicator(status, colorClass) {
@@ -425,21 +529,15 @@ ${userText}
 
             isFridaySpeaking = true;
             updateVoiceIndicator("SPEAKING", "bg-amber-400");
-            if (recognition) try { recognition.stop(); } catch(e) {}
+            if (recognition) try { recognition.stop(); } catch (e) {}
 
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(output);
-            utterance.rate = 1.05;
-            utterance.pitch = 1.0;
+            utterance.rate = 1.02;
+            utterance.pitch = 1.08;
             utterance.lang = 'en-US';
 
-            const voices = window.speechSynthesis.getVoices();
-            const preferredVoice = voices.find(v =>
-                /en/i.test(v.lang) &&
-                (v.lang.includes('en-US') || v.lang.includes('en-GB') || /google|microsoft|zira|samantha/i.test(v.name))
-            ) || voices.find(v => /en/i.test(v.lang));
-
-            if (preferredVoice) utterance.voice = preferredVoice;
+            if (preferredFemaleVoice) utterance.voice = preferredFemaleVoice;
 
             utterance.onend = () => {
                 isFridaySpeaking = false;
@@ -449,26 +547,25 @@ ${userText}
                     fridaySpeak(next, true);
                     return;
                 }
-                startRecognitionSafe(100);
+                startRecognitionSafe(90);
             };
 
             utterance.onerror = () => {
                 isFridaySpeaking = false;
                 updateVoiceIndicator("LISTENING", "bg-emerald-400");
-                startRecognitionSafe(150);
+                startRecognitionSafe(140);
             };
 
             window.speechSynthesis.speak(utterance);
         }
 
-        // --- SPEECH INPUT CONFIGURATION ---
         function initVoiceRecognition() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             if (!SpeechRecognition) return;
 
             recognition = new SpeechRecognition();
             recognition.continuous = true;
-            recognition.interimResults = false;
+            recognition.interimResults = true;
             recognition.maxAlternatives = 3;
             recognition.lang = 'en-IN';
 
@@ -486,37 +583,80 @@ ${userText}
 
             recognition.onerror = () => {
                 if (isSuitedUp && !isFridaySpeaking) {
-                    startRecognitionSafe(180);
+                    startRecognitionSafe(160);
                 }
             };
 
             recognition.onresult = (event) => {
-                const transcript = event.results?.[0]?.[0]?.transcript || '';
-                const command = normalizeCommand(transcript);
+                let finalText = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        finalText += ' ' + event.results[i][0].transcript;
+                    }
+                }
+                const command = normalizeCommand(finalText);
+                if (!command) return;
+
                 document.getElementById('user-speech-text').innerText = `> "${command.toUpperCase()}"`;
                 processBilingualComms(command);
             };
         }
 
-        // --- ADVANCED COGNITIVE DISPATCHER ---
+        function launchMissile(side = 'left') {
+            const w = overlayCanvas.width;
+            const h = overlayCanvas.height;
+            const origin = side === 'left'
+                ? { x: w * 0.42, y: h * 0.58 }
+                : { x: w * 0.58, y: h * 0.58 };
+
+            activeMissiles.push({
+                x: origin.x,
+                y: origin.y,
+                vx: side === 'left' ? -3.2 - Math.random() * 0.7 : 3.2 + Math.random() * 0.7,
+                vy: -5.4 - Math.random() * 0.8,
+                life: 120,
+                trail: [],
+                side
+            });
+
+            spawnParticles(origin.x, origin.y, 16, ['#ffffff', '#00ffff', '#60a5fa']);
+            spawnRipple(origin.x, origin.y, '#00ffff');
+            playFX('missile');
+        }
+
         async function processBilingualComms(cmd) {
             const command = normalizeCommand(cmd);
             if (!command) return;
-
-            let reply = "";
-            let handledLocally = false;
 
             triggerFxLabel("COMMAND ACCEPTED", hudColor);
             flashCenterPulse(hudColor);
             spawnRipple(window.innerWidth / 2, window.innerHeight / 2, hudColor);
             spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 10, [hudColor, '#ffffff']);
 
-            if (containsAny(command, ['refill missile', 'refill missiles', 'reload missile', 'reload missiles', 'rearm missile', 'rearm missiles', 'missile refill', 'replenish missiles', 'reload ordnance', 'ordnance reload'])) {
+            if (containsAny(command, [
+                'refill missile', 'refill missiles', 'reload missile', 'reload missiles',
+                'rearm missile', 'rearm missiles', 'missile refill', 'replenish missiles',
+                'reload ordnance', 'ordnance reload', 'missiles full', 'reset missiles'
+            ])) {
                 refillMissiles(true);
-                reply = "Missiles refilled and ordnance stack is ready.";
-                handledLocally = true;
+                return;
             }
-            else if (containsAny(command, ['scan', 'health', 'biometric', 'diagnostic', 'vitals', 'full scan'])) {
+
+            if (containsAny(command, [
+                'analyze this', 'analyze object', 'analyse object', 'analyze the object',
+                'what do you see', 'what is this', 'identify this', 'identify object',
+                'look around', 'scan surroundings', 'scan the room', 'inspect object',
+                'describe this', 'recognize object', 'object analysis'
+            ])) {
+                const visionReply = await analyzeSceneWithGemini(command);
+                fridaySpeak(visionReply || "I could not identify the object clearly.", true);
+                return;
+            }
+
+            let reply = "";
+            let handledLocally = false;
+
+            if (containsAny(command, ['scan', 'health', 'biometric', 'diagnostic', 'vitals', 'full scan'])) {
                 document.getElementById('scan-line').classList.add('scan-active');
                 playFX('suit');
                 spawnRipple(window.innerWidth / 2, window.innerHeight / 2, '#00ffff');
@@ -533,11 +673,11 @@ ${userText}
                 handledLocally = true;
             }
             else if (containsAny(command, ['how are you', 'how is friday', 'friday status'])) {
-                reply = "I am doing well, Boss. The advanced suit stack is fully active.";
+                reply = "I am functioning at full capacity, Boss. The advanced suit stack is stable.";
                 handledLocally = true;
             }
-            else if (containsAny(command, ['hello', 'hi friday', 'friday', 'listen', 'wake up'])) {
-                reply = "Online and ready, Sir. Systems are stable.";
+            else if (containsAny(command, ['hello', 'hi friday', 'friday', 'listen', 'wake up', 'stay awake'])) {
+                reply = "Online and ready, Sir. I am listening.";
                 handledLocally = true;
             }
             else if (containsAny(command, ['charge', 'power up', 'full power', 'boost power'])) {
@@ -599,7 +739,7 @@ ${userText}
             fridaySpeak(reply);
         }
 
-function changeHUDTheme(hex) {
+        function changeHUDTheme(hex) {
             hudColor = hex;
             document.documentElement.style.setProperty('--hud-glow', hex);
             document.getElementById('brand-panel').style.borderColor = hex;
@@ -607,88 +747,115 @@ function changeHUDTheme(hex) {
             document.getElementById('center-reticle').style.borderColor = hex;
         }
 
-        // --- SYNTHESIZED SOUND MODULES ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
         function playFX(type) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
+
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
             const now = audioCtx.currentTime;
 
             if (type === 'suit') {
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(40, now);
-                osc.frequency.exponentialRampToValueAtTime(900, now + 1.2);
-                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.3, now + 0.1);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 1.2);
-                osc.start(now); osc.stop(now + 1.2);
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(55, now);
+                osc.frequency.exponentialRampToValueAtTime(920, now + 1.1);
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.3, now + 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 1.1);
+                osc.start(now);
+                osc.stop(now + 1.1);
             } else if (type === 'repulsor') {
-                osc.type = 'sine'; osc.frequency.setValueAtTime(250, now);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(220, now);
                 osc.frequency.exponentialRampToValueAtTime(1700, now + 0.2);
-                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.15, now + 0.02);
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.16, now + 0.02);
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-                osc.start(now); osc.stop(now + 0.2);
+                osc.start(now);
+                osc.stop(now + 0.2);
             } else if (type === 'missile') {
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(650, now);
-                osc.frequency.exponentialRampToValueAtTime(90, now + 0.45);
-                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.2, now + 0.04);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.45);
-                osc.start(now); osc.stop(now + 0.45);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(760, now);
+                osc.frequency.exponentialRampToValueAtTime(120, now + 0.38);
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.18, now + 0.03);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.38);
+                osc.start(now);
+                osc.stop(now + 0.38);
             } else if (type === 'unibeam') {
-                osc.type = 'square'; osc.frequency.setValueAtTime(100, now);
-                osc.frequency.exponentialRampToValueAtTime(800, now + 0.5);
-                gain.gain.setValueAtTime(0, now); gain.gain.linearRampToValueAtTime(0.5, now + 0.1);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 1.0);
-                osc.start(now); osc.stop(now + 1.0);
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(110, now);
+                osc.frequency.exponentialRampToValueAtTime(860, now + 0.5);
+                gain.gain.setValueAtTime(0, now);
+                gain.gain.linearRampToValueAtTime(0.44, now + 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.95);
+                osc.start(now);
+                osc.stop(now + 0.95);
             }
         }
 
         function resize() {
-            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-            overlayCanvas.width = window.innerWidth; overlayCanvas.height = window.innerHeight;
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            overlayCanvas.width = window.innerWidth;
+            overlayCanvas.height = window.innerHeight;
         }
-        window.addEventListener('resize', resize); resize();
+        window.addEventListener('resize', resize);
+        resize();
 
         function triggerSuitUp() {
             isSuitedUp = true;
             document.getElementById('status-container').style.opacity = '0';
             document.getElementById('center-reticle').style.display = 'block';
             document.getElementById('flash').classList.add('flash-active');
+            document.body.classList.add('hud-ready');
             playFX('suit');
             addLog("Neural connection locked.");
-            
+            triggerFxLabel("HUD LINKED", '#00ffff');
+            spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 20, ['#00ffff', '#ffffff']);
+
             setTimeout(() => {
                 document.getElementById('main-hud').classList.add('hud-visible');
-                fridaySpeak("Welcome back, Boss. Mark Eighty-Five systems are calibrated. I am ready for your command.");
-                if (recognition) try { recognition.start(); } catch(e) {}
+                fridaySpeak("Welcome back, Boss. Mark Eighty-Five systems are calibrated. I am ready for your command.", true);
+                startRecognitionSafe(120);
             }, 600);
         }
 
-        // --- DESIGN INTERFACE RENDERING ENGINE ---
         function drawArmorPlates(ctx, lm, w, h, scale) {
             ctx.save();
             ctx.strokeStyle = hudColor + 'b3';
             ctx.lineWidth = 2;
             ctx.fillStyle = 'rgba(0, 15, 25, 0.25)';
 
-            const shL = {x: lm[11].x * w, y: lm[11].y * h};
-            const shR = {x: lm[12].x * w, y: lm[12].y * h};
+            const shL = { x: lm[11].x * w, y: lm[11].y * h };
+            const shR = { x: lm[12].x * w, y: lm[12].y * h };
             const chestX = (shL.x + shR.x) / 2;
             const chestY = (shL.y + shR.y) / 2 + 25;
 
-            // Chest Mesh Layout
-            ctx.beginPath(); ctx.moveTo(shL.x, shL.y); ctx.lineTo(chestX, chestY - 10);
-            ctx.lineTo(shR.x, shR.y); ctx.lineTo(shR.x - 25*scale, shR.y + 45*scale);
-            ctx.lineTo(chestX, chestY + 55*scale); ctx.lineTo(shL.x + 25*scale, shL.y + 45*scale);
-            ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(shL.x, shL.y);
+            ctx.lineTo(chestX, chestY - 10);
+            ctx.lineTo(shR.x, shR.y);
+            ctx.lineTo(shR.x - 25 * scale, shR.y + 45 * scale);
+            ctx.lineTo(chestX, chestY + 55 * scale);
+            ctx.lineTo(shL.x + 25 * scale, shL.y + 45 * scale);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
 
-            // Head Target Box Interface
-            if(lm[0].visibility > 0.7) {
-                const headX = lm[0].x * w; const headY = lm[0].y * h;
-                ctx.beginPath(); ctx.arc(headX, headY, 28 * scale, 0, Math.PI * 2);
-                ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.stroke();
+            if (lm[0].visibility > 0.7) {
+                const headX = lm[0].x * w;
+                const headY = lm[0].y * h;
+                ctx.beginPath();
+                ctx.arc(headX, headY, 28 * scale, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                ctx.stroke();
                 ctx.strokeStyle = hudColor;
-                ctx.strokeRect(headX - 18*scale, headY - 18*scale, 36*scale, 36*scale);
+                ctx.strokeRect(headX - 18 * scale, headY - 18 * scale, 36 * scale, 36 * scale);
             }
             ctx.restore();
         }
@@ -697,10 +864,11 @@ function changeHUDTheme(hex) {
             overlayCtx.save();
             const pulse = 1 + Math.sin(performance.now() / 180) * 0.08;
             const outer = size * pulse;
+
             overlayCtx.beginPath();
             for (let i = 0; i < 6; i++) {
                 const angle = (Math.PI / 3) * i + performance.now() / 2500;
-                overlayCtx[i===0?'moveTo':'lineTo'](x + outer * Math.cos(angle), y + outer * Math.sin(angle));
+                overlayCtx[i === 0 ? 'moveTo' : 'lineTo'](x + outer * Math.cos(angle), y + outer * Math.sin(angle));
             }
             overlayCtx.closePath();
             overlayCtx.lineWidth = 3;
@@ -726,7 +894,6 @@ function changeHUDTheme(hex) {
             overlayCtx.restore();
         }
 
-        // Modified for Flight Boosters
         function drawThruster(x, y, size, isFlight) {
             overlayCtx.save();
             if (isFlight) {
@@ -763,12 +930,11 @@ function changeHUDTheme(hex) {
             overlayCtx.restore();
         }
 
-        // Feature 2: Unibeam Rendering
         function drawUnibeam(x, y, h) {
             overlayCtx.save();
             const width = 160;
             const pulse = 1 + Math.sin(performance.now() / 120) * 0.05;
-            const grad = overlayCtx.createLinearGradient(x - width/2, y, x + width/2, y);
+            const grad = overlayCtx.createLinearGradient(x - width / 2, y, x + width / 2, y);
             grad.addColorStop(0, 'transparent');
             grad.addColorStop(0.18, 'rgba(0, 255, 255, 0.45)');
             grad.addColorStop(0.4, '#ffffff');
@@ -779,7 +945,7 @@ function changeHUDTheme(hex) {
             overlayCtx.fillStyle = grad;
             overlayCtx.shadowBlur = 58;
             overlayCtx.shadowColor = '#00ffff';
-            overlayCtx.fillRect(x - width/2, y - 50, width, h * pulse);
+            overlayCtx.fillRect(x - width / 2, y - 50, width, h * pulse);
 
             overlayCtx.beginPath();
             overlayCtx.arc(x, y, 24 * pulse, 0, Math.PI * 2);
@@ -791,7 +957,7 @@ function changeHUDTheme(hex) {
 
         function drawShield(x, y, size) {
             overlayCtx.save();
-            const grad = overlayCtx.createRadialGradient(x, y, size*0.1, x, y, size);
+            const grad = overlayCtx.createRadialGradient(x, y, size * 0.1, x, y, size);
             grad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
             grad.addColorStop(0.55, hudColor + '88');
             grad.addColorStop(1, 'transparent');
@@ -811,10 +977,59 @@ function changeHUDTheme(hex) {
             overlayCtx.restore();
         }
 
-        // --- MEDIAPIPE FRAMEWORK HANDLING MAPS ---// --- MEDIAPIPE FRAMEWORK HANDLING MAPS ---
+        function drawMissile(missile) {
+            const angle = Math.atan2(missile.vy, missile.vx);
+            const trail = missile.trail || [];
+            for (let i = 1; i < trail.length; i++) {
+                const a = i / trail.length;
+                overlayCtx.globalAlpha = a * 0.75;
+                overlayCtx.beginPath();
+                overlayCtx.moveTo(trail[i - 1].x, trail[i - 1].y);
+                overlayCtx.lineTo(trail[i].x, trail[i].y);
+                overlayCtx.lineWidth = 1.5 + a * 5;
+                overlayCtx.strokeStyle = `rgba(255,255,255,${0.15 + a * 0.65})`;
+                overlayCtx.shadowBlur = 20;
+                overlayCtx.shadowColor = '#00ffff';
+                overlayCtx.stroke();
+            }
+
+            overlayCtx.save();
+            overlayCtx.translate(missile.x, missile.y);
+            overlayCtx.rotate(angle + Math.PI / 2);
+
+            const bodyGrad = overlayCtx.createLinearGradient(0, -12, 0, 14);
+            bodyGrad.addColorStop(0, '#ffffff');
+            bodyGrad.addColorStop(0.3, '#00ffff');
+            bodyGrad.addColorStop(1, '#0f172a');
+
+            overlayCtx.beginPath();
+            if (typeof overlayCtx.roundRect === 'function') {
+                overlayCtx.roundRect(-4, -14, 8, 22, 4);
+            } else {
+                overlayCtx.rect(-4, -14, 8, 22);
+            }
+            overlayCtx.fillStyle = bodyGrad;
+            overlayCtx.shadowBlur = 18;
+            overlayCtx.shadowColor = '#00ffff';
+            overlayCtx.fill();
+
+            overlayCtx.beginPath();
+            overlayCtx.moveTo(-6, 6);
+            overlayCtx.lineTo(0, 18);
+            overlayCtx.lineTo(6, 6);
+            overlayCtx.closePath();
+            overlayCtx.fillStyle = 'rgba(255,140,0,0.85)';
+            overlayCtx.shadowBlur = 12;
+            overlayCtx.shadowColor = '#ff8c00';
+            overlayCtx.fill();
+
+            overlayCtx.restore();
+        }
+
         function onResults(results) {
             ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = 'rgba(1, 6, 12, 0.72)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
+            ctx.fillStyle = 'rgba(1, 6, 12, 0.72)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
 
             if (results.poseLandmarks) {
@@ -831,7 +1046,7 @@ function changeHUDTheme(hex) {
                     const lShoulder = lm[11], rShoulder = lm[12];
                     const lWrist = lm[15], rWrist = lm[16];
                     const lElbow = lm[13], rElbow = lm[14];
-                    
+
                     const chestX = ((lShoulder.x + rShoulder.x) / 2) * w;
                     const chestY = ((lShoulder.y + rShoulder.y) / 2) * h + 30;
                     const scale = Math.max(0.4, Math.abs(lShoulder.x - rShoulder.x) * 2);
@@ -839,120 +1054,140 @@ function changeHUDTheme(hex) {
                     drawArmorPlates(overlayCtx, lm, w, h, scale);
                     drawArcReactor(chestX, chestY, 26 * scale);
 
-                    // Shield Geometry Logic
                     const wristDist = Math.hypot(lWrist.x - rWrist.x, lWrist.y - rWrist.y);
                     const shieldActive = (wristDist < 0.08 && lWrist.y > lShoulder.y);
-                    
-                    // Feature 2: Unibeam Logic (wrists crossed close to chest)
-                    const isUnibeamPose = (wristDist < 0.1 && Math.abs(lWrist.y - chestY/h) < 0.15 && Math.abs(rWrist.y - chestY/h) < 0.15);
+                    const isUnibeamPose = (wristDist < 0.1 && Math.abs(lWrist.y - chestY / h) < 0.15 && Math.abs(rWrist.y - chestY / h) < 0.15);
 
                     if (isUnibeamPose) {
                         drawUnibeam(chestX, chestY, h);
                         document.body.classList.add('heavy-shake');
                         drainPower(1.0);
-                        if (!unibeamCharging) { 
-                            fridaySpeak("Unibeam discharging. Clear the path!"); 
-                            playFX('unibeam'); 
+                        if (!unibeamCharging) {
+                            fridaySpeak("Unibeam discharging. Clear the path!", true);
+                            playFX('unibeam');
+                            spawnParticles(chestX, chestY, 18, ['#ffffff', '#00ffff']);
+                            spawnRipple(chestX, chestY, '#ffffff');
                         }
                         unibeamCharging = true;
                     } else {
                         unibeamCharging = false;
                         document.body.classList.remove('heavy-shake');
-                        
+
                         if (shieldActive) {
                             drawShield(chestX, chestY, 240 * scale);
-                            if (!lastShieldState) { fridaySpeak("Hardlight shielding protocol active."); addLog("Shield optimized."); }
+                            if (!lastShieldState) {
+                                fridaySpeak("Hardlight shielding protocol active.", true);
+                                addLog("Shield optimized.");
+                            }
                             drainPower(0.25);
                         }
                     }
                     lastShieldState = shieldActive;
 
-                    // Feature 1: Flight Boosters / Repulsors
                     const lFire = lWrist.y < lElbow.y - 0.05;
                     const rFire = rWrist.y < rElbow.y - 0.05;
                     const isFlyingPose = Math.abs(lWrist.y - lShoulder.y) < 0.1 && Math.abs(rWrist.y - rShoulder.y) < 0.1 && !lFire && !rFire && !isUnibeamPose;
-                    
+
                     const flightPanel = document.getElementById('flight-panel');
-                    
+
                     if (isFlyingPose) {
                         flightPanel.classList.remove('hidden');
                         drainPower(0.15);
-                        // Draw thrusters pointing down from hands
                         if (lWrist.visibility > 0.5) drawThruster(lWrist.x * w, lWrist.y * h, 18 * scale, true);
                         if (rWrist.visibility > 0.5) drawThruster(rWrist.x * w, rWrist.y * h, 18 * scale, true);
-                        
-                        if(!lastFlightState) { 
-                            fridaySpeak("Flight boosters are active. Stabilizing altitude.");
-                            spawnParticles(lWrist.x * w, lWrist.y * h, 4, ['#00ffff', '#ffffff']);
-                            spawnParticles(rWrist.x * w, rWrist.y * h, 4, ['#00ffff', '#ffffff']);
+
+                        if (!lastFlightState) {
+                            fridaySpeak("Vector boosters are active. Stabilizing altitude.", true);
+                            spawnParticles(lWrist.x * w, lWrist.y * h, 8, ['#00ffff', '#ffffff']);
+                            spawnParticles(rWrist.x * w, rWrist.y * h, 8, ['#00ffff', '#ffffff']);
                         }
                     } else {
                         flightPanel.classList.add('hidden');
-                        
-                        // Standard Repulsors
+
                         if (lWrist.visibility > 0.5 && !isUnibeamPose) drawThruster(lWrist.x * w, lWrist.y * h, 18 * scale, false);
                         if (rWrist.visibility > 0.5 && !isUnibeamPose) drawThruster(rWrist.x * w, rWrist.y * h, 18 * scale, false);
                     }
                     lastFlightState = isFlyingPose;
-                    
+
                     if ((lFire || rFire) && !isUnibeamPose && !isFlyingPose) {
                         document.body.classList.add('shake');
                         drainPower(0.35);
-                        if (!lastRepulsorState) { fridaySpeak("Repulsor matrix is discharging."); }
-                        if (Math.random() > 0.75) playFX('repulsor');
-                        spawnParticles((lFire ? lWrist.x : rWrist.x) * w, (lFire ? lWrist.y : rWrist.y) * h, 4, ['#ffffff', '#00ffff']);
-                        
-                        // Blast visuals
-                        if(lFire) { overlayCtx.beginPath(); overlayCtx.arc(lWrist.x*w, lWrist.y*h, 25*scale, 0, Math.PI*2); overlayCtx.fillStyle='#fff'; overlayCtx.fill(); }
-                        if(rFire) { overlayCtx.beginPath(); overlayCtx.arc(rWrist.x*w, rWrist.y*h, 25*scale, 0, Math.PI*2); overlayCtx.fillStyle='#fff'; overlayCtx.fill(); }
+                        if (!lastRepulsorState) {
+                            fridaySpeak("Repulsor matrix is discharging.", true);
+                        }
+                        if (Math.random() > 0.72) playFX('repulsor');
 
+                        const rx = (lFire ? lWrist.x : rWrist.x) * w;
+                        const ry = (lFire ? lWrist.y : rWrist.y) * h;
+                        spawnParticles(rx, ry, 8, ['#ffffff', '#00ffff']);
+                        spawnRipple(rx, ry, '#ffffff');
+
+                        if (lFire) {
+                            overlayCtx.beginPath();
+                            overlayCtx.arc(lWrist.x * w, lWrist.y * h, 25 * scale, 0, Math.PI * 2);
+                            overlayCtx.fillStyle = '#fff';
+                            overlayCtx.shadowBlur = 20;
+                            overlayCtx.shadowColor = '#ffffff';
+                            overlayCtx.fill();
+                        }
+                        if (rFire) {
+                            overlayCtx.beginPath();
+                            overlayCtx.arc(rWrist.x * w, rWrist.y * h, 25 * scale, 0, Math.PI * 2);
+                            overlayCtx.fillStyle = '#fff';
+                            overlayCtx.shadowBlur = 20;
+                            overlayCtx.shadowColor = '#ffffff';
+                            overlayCtx.fill();
+                        }
                     } else if (!isUnibeamPose) {
                         document.body.classList.remove('shake');
                     }
                     lastRepulsorState = (lFire || rFire);
 
-                    // Micro-Missile Payload Launch Layout
                     const rHandToLShoulder = Math.hypot(rWrist.x - lShoulder.x, rWrist.y - lShoulder.y) < 0.08;
                     const lHandToRShoulder = Math.hypot(lWrist.x - rShoulder.x, lWrist.y - rShoulder.y) < 0.08;
-                    
-                    if ((rHandToLShoulder || lHandToRShoulder) && missiles > 0 && Math.random() > 0.94) {
-                        const spawnX = (rHandToLShoulder ? lShoulder.x : rShoulder.x) * w;
-                        const spawnY = (rHandToLShoulder ? lShoulder.y : rShoulder.y) * h;
-                        activeMissiles.push({ x: spawnX, y: spawnY });
-                        spawnParticles(spawnX, spawnY, 10, ['#ffffff', '#00ffff', '#f59e0b']);
-                        spawnRipple(spawnX, spawnY, '#00ffff');
-                        missiles--; 
-                        document.getElementById('missile-count').innerText = missiles;
-                        playFX('missile');
-                        
-                        if(missiles === 0) {
-                            document.getElementById('weapon-status').innerText = "ORDNANCE DEPLETED";
-                            document.getElementById('weapon-status').className = "text-[9px] text-rose-500 tracking-widest mt-1.5 uppercase font-mono animate-pulse";
-                            fridaySpeak("Warning! Micro missile inventory is depleted.");
+
+                    if ((rHandToLShoulder || lHandToRShoulder) && missiles > 0 && Math.random() > 0.92) {
+                        launchMissile(rHandToLShoulder ? 'left' : 'right');
+                        missiles--;
+                        syncMissileUI();
+
+                        if (missiles === 0) {
+                            setWeaponStatus("ORDNANCE DEPLETED", true);
+                            fridaySpeak("Warning! Micro missile inventory is depleted.", true);
                         }
                     }
                 }
             } else if (isSuitedUp) {
-                isSuitedUp = false; isDetecting = false;
+                isSuitedUp = false;
+                isDetecting = false;
                 document.getElementById('status-container').style.opacity = '1';
                 document.getElementById('sync-status').innerText = "// SYSTEM DISCONNECTED // AWAITING NEURAL SYNAPSE";
                 document.getElementById('center-reticle').style.display = 'none';
                 document.getElementById('main-hud').classList.remove('hud-visible');
                 document.body.classList.remove('shake', 'heavy-shake');
                 if (recognition) recognition.stop();
-                fridaySpeak("Target lost. I am putting the suit on standby network.");
+                fridaySpeak("Target lost. I am putting the suit on standby network.", true);
             }
 
-            // Render Active Launched Missiles
             for (let i = activeMissiles.length - 1; i >= 0; i--) {
-                let m = activeMissiles[i]; m.y -= 25; 
-                overlayCtx.beginPath();
-                overlayCtx.arc(m.x, m.y, 4, 0, Math.PI*2);
-                overlayCtx.fillStyle = '#ffffff';
-                overlayCtx.shadowBlur = 12;
-                overlayCtx.shadowColor = '#00ffff';
-                overlayCtx.fill();
-                if (m.y < 0) activeMissiles.splice(i, 1);
+                const m = activeMissiles[i];
+                m.trail = m.trail || [];
+                m.trail.push({ x: m.x, y: m.y });
+                if (m.trail.length > 14) m.trail.shift();
+
+                m.x += m.vx;
+                m.y += m.vy;
+                m.vx *= 1.004;
+                m.vy -= 0.03;
+                m.life -= 1;
+
+                drawMissile(m);
+
+                if (m.y < -40 || m.x < -60 || m.x > overlayCanvas.width + 60 || m.life <= 0) {
+                    spawnRipple(m.x, m.y, '#00ffff');
+                    spawnParticles(m.x, m.y, 10, ['#00ffff', '#ffffff', '#f59e0b']);
+                    activeMissiles.splice(i, 1);
+                }
             }
 
             renderVisualEffects();
@@ -961,43 +1196,58 @@ function changeHUDTheme(hex) {
         function drainPower(amount) {
             powerCore = Math.max(0, powerCore - amount);
             document.getElementById('power-val').innerText = Math.floor(powerCore);
-            if(powerCore <= 15 && powerCore > 14.6) {
-                fridaySpeak("Warning, Boss! Arc reactor power is critically low. Charge the core.");
+            if (powerCore <= 15 && powerCore > 14.6) {
+                fridaySpeak("Warning, Boss! Arc reactor power is critically low. Charge the core.", true);
             }
         }
 
-        const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
-        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6 });
+        const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
+        pose.setOptions({
+            modelComplexity: 1,
+            smoothLandmarks: true,
+            minDetectionConfidence: 0.6,
+            minTrackingConfidence: 0.6
+        });
         pose.onResults(onResults);
 
-        const camera = new Camera(video, { onFrame: async () => { await pose.send({image: video}); }, width: 1280, height: 720 });
+        const camera = new Camera(video, {
+            onFrame: async () => { await pose.send({ image: video }); },
+            width: 1280,
+            height: 720
+        });
         camera.start();
 
         initVoiceRecognition();
 
-        // Regenerate Energy Matrix Arrays Over-Time
+        document.addEventListener('pointerdown', () => {
+            if (armedOnce) return;
+            armedOnce = true;
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            startRecognitionSafe(120);
+        });
+
         setInterval(() => {
-            if(isSuitedUp && !lastRepulsorState && !lastShieldState && !unibeamCharging && !lastFlightState) {
-                if(powerCore < 100) {
-                    powerCore = Math.min(100, powerCore + 0.4);
+            if (isSuitedUp && !lastRepulsorState && !lastShieldState && !unibeamCharging && !lastFlightState) {
+                if (powerCore < 100) {
+                    powerCore = Math.min(100, powerCore + 0.45);
                     document.getElementById('power-val').innerText = Math.floor(powerCore);
                 }
             }
         }, 1200);
 
-        // Feature 4: Autonomous Proactive F.R.I.D.A.Y. Recommendations
         setInterval(() => {
-            if(isSuitedUp && !isFridaySpeaking && Math.random() > 0.6) {
+            if (isSuitedUp && !isFridaySpeaking && Math.random() > 0.65) {
                 const recommendations = [
-                    "Boss, try the flight boosters. Keep both arms down.",
+                    "Boss, try the vector boosters. Keep both arms steady.",
                     "Sir, the health scan is available. Say \"run health scan\".",
                     "Ordnance stack is stable, Boss. Cross your hands to fire the Unibeam.",
-                    "Stealth mode is on standby, Sir. What should I activate?"
+                    "Stealth mode is on standby, Sir. What should I activate?",
+                    "I can analyze any object you show me. Say \"analyze this\"."
                 ];
                 const rec = recommendations[Math.floor(Math.random() * recommendations.length)];
                 fridaySpeak(rec);
             }
-        }, 20000); // Analyzes every 20 seconds
+        }, 18000);
     </script>
 </body>
 </html>
