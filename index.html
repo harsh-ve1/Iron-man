@@ -56,22 +56,27 @@
                 <div class="text-[10px] text-green-400 tracking-widest mt-1 font-mono">// NEURAL CONNECTION STABLE</div>
             </div>
             
-            <div class="friday-box p-3 rounded flex items-center gap-4 max-w-sm pointer-events-auto">
-                <div class="w-3 h-3 rounded-full bg-cyan-400 animate-ping absolute"></div>
-                <div class="w-3 h-3 rounded-full bg-cyan-500"></div>
-                <div>
-                    <div class="text-[10px] text-cyan-400 font-bold tracking-widest">F.R.I.D.A.Y. v4.2</div>
-                    <div id="friday-speech-text" class="text-xs text-white mt-1 italic font-sans leading-tight">"Systems monitoring active..."</div>
+            <div class="friday-box p-4 rounded flex flex-col gap-2 max-w-sm pointer-events-auto relative">
+                <div class="flex items-center gap-4">
+                    <div id="friday-ping" class="w-3 h-3 rounded-full bg-cyan-400 animate-ping absolute"></div>
+                    <div id="friday-dot" class="w-3 h-3 rounded-full bg-cyan-500 transition-colors duration-300"></div>
+                    <div>
+                        <div class="text-[10px] text-cyan-400 font-bold tracking-widest">F.R.I.D.A.Y. v4.5</div>
+                        <div id="friday-speech-text" class="text-xs text-white mt-1 italic font-sans leading-tight">"Systems monitoring active..."</div>
+                    </div>
+                </div>
+                <div class="border-t border-cyan-900/50 pt-2 mt-1">
+                    <div id="user-speech-text" class="text-[10px] text-cyan-600 font-mono tracking-wider truncate uppercase">> AWAITING VOICE INPUT...</div>
                 </div>
             </div>
         </div>
 
         <div class="flex justify-between items-end">
             <div class="text-xs text-cyan-400 bg-black/70 p-4 border border-cyan-900/60 leading-relaxed tracking-wider rounded backdrop-blur-sm">
-                <span class="text-white font-bold">// GESTURE PROTOCOLS:</span><br>
+                <span class="text-white font-bold">// GESTURE & VOICE COMMS:</span><br>
                 > ARMS UP       : Fire Nano-Repulsors<br>
                 > CROSS WRISTS  : Deploy Hex-Energy Shield<br>
-                > TOUCH SHOULDER: Launch Micro-Missiles
+                > SAY "STATUS" / "RELOAD" / "CHARGE POWER"
             </div>
             
             <div class="text-right border-r-2 border-cyan-400 pr-4 bg-black/50 backdrop-blur-md py-3 pl-8">
@@ -96,27 +101,120 @@
         let lastShieldState = false;
         let lastRepulsorState = false;
         
-        // FRIDAY Voice Engine (Web Speech API)
+        // Voice Recognition Variables
+        let recognition;
+        let isFridaySpeaking = false;
+
+        // --- FRIDAY SPEECH SYNTHESIS ENGINE ---
         function fridaySpeak(text) {
             document.getElementById('friday-speech-text').innerText = `"${text}"`;
             if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel(); // Stop any ongoing speech
+                isFridaySpeaking = true;
+                if (recognition) recognition.stop(); // Stop listening when AI speaks to avoid feedback loop
+
+                window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
                 
-                // Fine-tuning voice for sleek, smart female AI character
                 utterance.rate = 1.1; 
                 utterance.pitch = 1.15; 
                 
-                // Try finding an English female voice asset
                 const voices = window.speechSynthesis.getVoices();
                 const femaleVoice = voices.find(v => v.name.toLowerCase().includes('google us english') || v.name.toLowerCase().includes('zira') || v.name.toLowerCase().includes('female'));
                 if (femaleVoice) utterance.voice = femaleVoice;
                 
+                utterance.onend = () => {
+                    isFridaySpeaking = false;
+                    if (isSuitedUp && recognition) {
+                        try { recognition.start(); } catch(e) {}
+                    }
+                };
+
                 window.speechSynthesis.speak(utterance);
             }
         }
 
-        // Zero-Lag Synth Audio Engine for Sound Effects
+        // --- FRIDAY SPEECH RECOGNITION (LISTENING ENGINE) ---
+        function initVoiceRecognition() {
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SpeechRecognition) {
+                console.log("Speech Recognition not supported in this browser.");
+                return;
+            }
+
+            recognition = new SpeechRecognition();
+            recognition.continuous = true;
+            recognition.interimResults = false;
+            recognition.lang = 'en-US'; // Works beautifully for English & mixed commands
+
+            recognition.onstart = () => {
+                const dot = document.getElementById('friday-dot');
+                const ping = document.getElementById('friday-ping');
+                dot.className = "w-3 h-3 rounded-full bg-green-400";
+                ping.className = "w-3 h-3 rounded-full bg-green-400 animate-ping absolute";
+            };
+
+            recognition.onend = () => {
+                // Keep listening loop active if suited up and AI isn't speaking
+                if (isSuitedUp && !isFridaySpeaking) {
+                    try { recognition.start(); } catch(e) {}
+                } else if (!isSuitedUp) {
+                    const dot = document.getElementById('friday-dot');
+                    dot.className = "w-3 h-3 rounded-full bg-cyan-500";
+                }
+            };
+
+            recognition.onresult = (event) => {
+                const lastResultIndex = event.results.length - 1;
+                const command = event.results[lastResultIndex][0].transcript.toLowerCase().trim();
+                
+                // Show raw speech text on HUD terminal
+                document.getElementById('user-speech-text').innerText = `> ${command.toUpperCase()}`;
+                
+                processVoiceCommand(command);
+            };
+        }
+
+        // --- INTELLECTUAL VOICE COMMAND PROCESSING ---
+        function processVoiceCommand(cmd) {
+            let reply = "";
+
+            if (cmd.includes('status') || cmd.includes('report') || cmd.includes('how are you')) {
+                const currentPower = document.getElementById('power-val').innerText;
+                reply = `All systems are functional, Boss. Power matrix is sitting at ${currentPower} percent. Ordnance stands at ${missiles} micro missiles.`;
+            } 
+            else if (cmd.includes('hello') || cmd.includes('hey friday') || cmd.includes('wake up')) {
+                reply = "Systems are online and waiting. Ready for tactical instructions, Boss.";
+            } 
+            else if (cmd.includes('charge') || cmd.includes('power up') || cmd.includes('max power')) {
+                document.getElementById('power-val').innerText = "100";
+                reply = "Rerouting auxiliary cells. Main nanotech core replenished to 100 percent.";
+            } 
+            else if (cmd.includes('reload') || cmd.includes('arm weapons') || cmd.includes('missiles')) {
+                missiles = 24;
+                document.getElementById('missile-count').innerText = missiles;
+                reply = "Weapon systems refitted. Twenty-four localized micro-projectiles are loaded.";
+            } 
+            else if (cmd.includes('who are you') || cmd.includes('your name')) {
+                reply = "I am F.R.I.D.A.Y., your automated tactical intelligence layer, designed by Verma Group.";
+            } 
+            else if (cmd.includes('clear terminal') || cmd.includes('reset screen')) {
+                reply = "Clearing communication feeds.";
+                setTimeout(() => { document.getElementById('user-speech-text').innerText = " > AWAITING VOICE INPUT..."; }, 1500);
+            }
+            else {
+                // Conversational dynamic responses
+                const fallbackResponses = [
+                    "Understood. Analyzing parameters.",
+                    "I am processing your command, Boss.",
+                    "Data logged. Neural link is compiling the request."
+                ];
+                reply = fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)];
+            }
+
+            fridaySpeak(reply);
+        }
+
+        // --- AUDIO SOUND EFFECTS GENERATOR ---
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         function playFX(type) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -151,7 +249,6 @@
             overlayCanvas.width = window.innerWidth; overlayCanvas.height = window.innerHeight;
         }
         window.addEventListener('resize', resize); resize();
-        // Trigger voice sync load
         if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
 
         function triggerSuitUp() {
@@ -160,15 +257,15 @@
             document.getElementById('flash').classList.add('flash-active');
             playFX('suit');
             
-            // UI Trigger and Voice introduction
             setTimeout(() => {
                 document.getElementById('main-hud').classList.add('hud-visible');
-                fridaySpeak("Hello Boss. Mark 85 nanotech systems are fully operational. I have initialized weapon and defensive layers.");
+                fridaySpeak("Hello Boss. Mark 85 nanotech systems are fully operational. Voice protocols linked.");
+                // Initialize Listening Engine
+                if (recognition) try { recognition.start(); } catch(e) {}
             }, 700);
         }
 
         // --- GRAPHICS PROCEDURAL NANOTECH ARMOR ---
-        
         function drawArmorPlates(ctx, lm, w, h, scale) {
             ctx.save();
             ctx.strokeStyle = 'rgba(0, 255, 255, 0.5)';
@@ -182,40 +279,34 @@
             const chestX = (shL.x + shR.x) / 2;
             const chestY = (shL.y + shR.y) / 2 + 30;
 
-            // 1. Sleek Upper Chest Armor Plates
             ctx.beginPath();
             ctx.moveTo(shL.x, shL.y); ctx.lineTo(chestX, chestY - 15);
             ctx.lineTo(shR.x, shR.y); ctx.lineTo(shR.x - 20*scale, shR.y + 40*scale);
             ctx.lineTo(chestX, chestY + 50*scale); ctx.lineTo(shL.x + 20*scale, shL.y + 40*scale);
             ctx.closePath(); ctx.fill(); ctx.stroke();
 
-            // 2. Abdominal Core Lining
             ctx.beginPath();
             ctx.moveTo(shL.x + 30*scale, shL.y + 50*scale); ctx.lineTo(shR.x - 30*scale, shR.y + 50*scale);
             ctx.lineTo(hipR.x + 10*scale, hipR.y - 20*scale); ctx.lineTo(hipL.x - 10*scale, hipL.y - 20*scale);
             ctx.closePath(); ctx.stroke();
 
-            // 3. Forearm Gauntlets (Elbow to Wrist)
-            if(lm[13].visibility > 0.5 && lm[15].visibility > 0.5) { // Left Arm
+            if(lm[13].visibility > 0.5 && lm[15].visibility > 0.5) {
                 ctx.beginPath();
                 ctx.moveTo(lm[13].x*w - 10, lm[13].y*h); ctx.lineTo(lm[13].x*w + 10, lm[13].y*h);
                 ctx.lineTo(lm[15].x*w + 8, lm[15].y*h); ctx.lineTo(lm[15].x*w - 8, lm[15].y*h);
                 ctx.closePath(); ctx.fillStyle = 'rgba(0, 255, 255, 0.15)'; ctx.fill(); ctx.stroke();
             }
-            if(lm[14].visibility > 0.5 && lm[14].visibility > 0.5) { // Right Arm
+            if(lm[14].visibility > 0.5 && lm[16].visibility > 0.5) {
                 ctx.beginPath();
                 ctx.moveTo(lm[14].x*w - 10, lm[14].y*h); ctx.lineTo(lm[14].x*w + 10, lm[14].y*h);
                 ctx.lineTo(lm[16].x*w + 8, lm[16].y*h); ctx.lineTo(lm[16].x*w - 8, lm[16].y*h);
                 ctx.closePath(); ctx.fill(); ctx.stroke();
             }
 
-            // 4. Futuristic Tactical Eye HUD Frame
             if(lm[0].visibility > 0.7) {
                 const headX = lm[0].x * w; const headY = lm[0].y * h;
                 ctx.beginPath(); ctx.arc(headX, headY, 25 * scale, 0, Math.PI * 2);
                 ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)'; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
-                
-                // Target bounding brackets
                 ctx.strokeStyle = '#00ffff';
                 ctx.strokeRect(headX - 15*scale, headY - 15*scale, 30*scale, 30*scale);
             }
@@ -266,7 +357,6 @@
             overlayCtx.beginPath(); overlayCtx.arc(x, y, size, 0, Math.PI * 2);
             overlayCtx.fillStyle = gradient; overlayCtx.fill();
             
-            // Tech-Hexagon Mapping inside shield
             overlayCtx.strokeStyle = 'rgba(0, 255, 255, 0.3)'; overlayCtx.lineWidth = 1.5;
             for(let i=0; i<4; i++) {
                 overlayCtx.beginPath(); overlayCtx.arc(x, y, size * (0.25 * (i+1)), 0, Math.PI * 2); overlayCtx.stroke();
@@ -274,7 +364,6 @@
         }
 
         // --- MEDIAPIPE CORE COMPILATION LOOP ---
-
         function onResults(results) {
             ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
             ctx.fillStyle = 'rgba(0, 4, 8, 0.72)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
@@ -300,13 +389,9 @@
                     const chestY = ((lShoulder.y + rShoulder.y) / 2) * h + 35;
                     const scale = Math.max(0.4, Math.abs(lShoulder.x - rShoulder.x) * 2);
 
-                    // 1. Nanotech Suit Geometry Plates
                     drawArmorPlates(overlayCtx, lm, w, h, scale);
-
-                    // 2. Arc Reactor Centerpiece
                     drawArcReactor(chestX, chestY, 28 * scale);
 
-                    // 3. Shield Gestures & Voice Warnings
                     const wristDist = Math.abs(lWrist.x - rWrist.x);
                     const shieldActive = (wristDist < 0.08 && lWrist.y > lShoulder.y && lWrist.y < lAnkle.y);
                     if (shieldActive) {
@@ -316,7 +401,6 @@
                     }
                     lastShieldState = shieldActive;
 
-                    // 4. Smart Repulsors (Fire triggers when wrist is higher than elbow)
                     const lFire = lWrist.y < lElbow.y - 0.04;
                     const rFire = rWrist.y < rElbow.y - 0.04;
                     
@@ -329,13 +413,11 @@
                     if ((lFire || rFire) && Math.random() > 0.8) playFX('repulsor');
                     lastRepulsorState = (lFire || rFire);
 
-                    // 5. Twin Foot Plasma Flight Boosters
                     let isFlying = false;
                     if (lAnkle.visibility > 0.5) { drawFlightBooster(lAnkle.x * w, lAnkle.y * h, 14 * scale); isFlying = true; }
                     if (rAnkle.visibility > 0.5) { drawFlightBooster(rAnkle.x * w, rAnkle.y * h, 14 * scale); isFlying = true; }
                     if (isFlying && Math.random() > 0.93) playFX('booster');
 
-                    // 6. Micro-Missile Acquisition System (Touch shoulder to deploy)
                     const rHandToLShoulder = Math.hypot(rWrist.x - lShoulder.x, rWrist.y - lShoulder.y) < 0.09;
                     const lHandToRShoulder = Math.hypot(lWrist.x - rShoulder.x, lWrist.y - rShoulder.y) < 0.09;
                     
@@ -354,10 +436,10 @@
                 isSuitedUp = false; isDetecting = false;
                 document.getElementById('status-container').style.opacity = '1';
                 document.getElementById('main-hud').classList.remove('hud-visible');
+                if (recognition) recognition.stop();
                 fridaySpeak("Target lost. Putting systems on standby mode.");
             }
 
-            // Real-time calculation and trajectory tracking for Missiles
             for (let i = activeMissiles.length - 1; i >= 0; i--) {
                 let m = activeMissiles[i];
                 m.y -= 18; 
@@ -379,7 +461,8 @@
         const camera = new Camera(video, { onFrame: async () => { await pose.send({image: video}); }, width: 1280, height: 720 });
         camera.start();
 
-        // System Fluctuations
+        // System Fluctuations & Initialization
+        initVoiceRecognition();
         setInterval(() => {
             if(isSuitedUp) {
                 const powerEl = document.getElementById('power-val');
