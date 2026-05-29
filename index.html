@@ -1,2020 +1,243 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang=en>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mark 85 - Verma Group Advanced AI HUD</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    
-    <style>
-        body, html { margin: 0; width: 100vw; height: 100vh; overflow: hidden; background: #010102; color: #00ffff; font-family: 'Courier New', Courier, monospace; user-select: none; }
-        
-        /* Cinematic Aesthetics */
-        .vignette { position: absolute; inset: 0; box-shadow: inset 0 0 250px rgba(0,0,0,0.95); z-index: 10; pointer-events: none; }
-        .grid-bg { position: absolute; inset: 0; background-image: linear-gradient(rgba(0, 255, 255, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 255, 255, 0.02) 1px, transparent 1px); background-size: 50px 50px; z-index: 11; pointer-events: none; opacity: 0.5; }
-        
-        /* Camera & Graphics Overlays */
-        .input_video { position: absolute; width: 100%; height: 100%; object-fit: cover; opacity: 0; }
-        .output_canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); filter: contrast(1.4) brightness(0.75); z-index: 1; transition: filter 0.3s ease; }
-        .overlay_canvas { position: absolute; width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); z-index: 5; pointer-events: none; }
-
-        /* Tactical Filter Toggles */
-        .thermal-mode { filter: contrast(1.8) brightness(0.9) saturate(2.5) hue-rotate(90deg) !important; }
-
-        /* Minimal Tech UI Layout */
-        .hud-ui { position: absolute; inset: 0; z-index: 20; pointer-events: none; opacity: 0; transition: opacity 0.8s cubic-bezier(0.075, 0.82, 0.165, 1); display: flex; flex-direction: column; justify-content: space-between; padding: 2.5rem; }
-        .hud-visible { opacity: 1; }
-        
-        .sys-msg { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; z-index: 50; transition: all 0.5s ease; }
-        .flash-overlay { position: absolute; inset: 0; background: #fff; z-index: 99; opacity: 0; pointer-events: none; }
-        .flash-active { animation: flash-bang 1s cubic-bezier(0.1, 0.8, 0.3, 1) forwards; }
-
-        /* Scanning Sweep (New Feature) */
-        .scan-line { position: absolute; top: 0; left: 0; width: 100%; height: 4px; background: rgba(0, 255, 255, 0.8); box-shadow: 0 0 20px 5px rgba(0, 255, 255, 0.5); z-index: 15; opacity: 0; pointer-events: none; }
-        .scan-active { animation: scan-sweep 2.5s ease-in-out; opacity: 1; }
-        @keyframes scan-sweep { 0% { top: 0; opacity: 1; } 50% { top: 100%; opacity: 1; } 100% { top: 0; opacity: 0; } }
-
-        /* F.R.I.D.A.Y. Box & Custom UI Elements */
-        .friday-box { background: rgba(0, 8, 12, 0.88); border: 1px solid rgba(0, 255, 255, 0.25); backdrop-blur: 12px; box-shadow: 0 0 30px rgba(0, 255, 255, 0.08); }
-        .terminal-scroll { max-height: 120px; overflow: hidden; mask-image: linear-gradient(to top, transparent, black 20%); }
-
-        @keyframes flash-bang { 0% { opacity: 1; } 20% { background: #00ffff; opacity: 0.85; } 100% { opacity: 0; background: transparent; } }
-        
-        /* Camera shake on firing repulsors */
-        .shake { animation: screen-shake 0.2s ease-in-out infinite; }
-        .heavy-shake { animation: screen-shake-heavy 0.1s ease-in-out infinite; }
-        @keyframes screen-shake { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-3px, 2px); } 75% { transform: translate(3px, -2px); } }
-        @keyframes screen-shake-heavy { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(-8px, 6px); } 75% { transform: translate(8px, -6px); } }
-
-        /* Targeting Reticle Centerpiece */
-        .reticle { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 120px; height: 120px; border: 1px dashed rgba(0,255,255,0.2); border-radius: 50%; z-index: 15; pointer-events: none; display: none; }
-        .reticle-inner { position: absolute; inset: 15px; border: 2px solid transparent; border-top-color: rgba(0,255,255,0.6); border-bottom-color: rgba(0,255,255,0.6); border-radius: 50%; animation: spin 4s linear infinite; }
-        @keyframes spin { 100% { transform: rotate(360deg); } }
-
-        /* Dynamic Theme Variables */
-        :root {
-            --hud-glow: #00ffff;
-            --hud-text: 0, 255, 255;
-        }
-        .theme-glow { color: var(--hud-glow); }
-        .theme-border { border-color: var(--hud-glow); }
-        .scan-active-state .output_canvas,
-        .scan-active-state .overlay_canvas {
-            filter: contrast(1.1) brightness(1.3) saturate(1.08);
-        }
-
-        .scan-wash {
-            position: absolute;
-            inset: 0;
-            z-index: 12;
-            pointer-events: none;
-            opacity: 0;
-            background:
-                radial-gradient(circle at center, rgba(255,255,255,0.95) 0%, rgba(255,255,255,0.72) 28%, rgba(255,255,255,0.30) 56%, rgba(0,0,0,0) 82%);
-            mix-blend-mode: screen;
-            transition: opacity 260ms ease;
-        }
-        .scan-active-state .scan-wash {
-            opacity: 0;
-            display: none;
-            animation: none;
-        }
-        @keyframes scan-wash-pulse {
-            0%, 100% { transform: scale(1); filter: brightness(1); }
-            50% { transform: scale(1.02); filter: brightness(1.14); }
-        }
-
-        .scan-corners {
-            position: absolute;
-            inset: 8%;
-            z-index: 13;
-            pointer-events: none;
-            opacity: 0;
-            transition: opacity 260ms ease;
-        }
-        .scan-active-state .scan-corners { opacity: 1; }
-        .scan-corners::before,
-        .scan-corners::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            border: 2px solid rgba(255,255,255,0.18);
-            border-radius: 26px;
-            clip-path: polygon(0 0, 14% 0, 14% 3%, 3% 3%, 3% 14%, 0 14%, 0 0);
-        }
-        .scan-corners::after {
-            border-color: rgba(0,255,255,0.18);
-            filter: blur(1px);
-            animation: scan-corner-glow 1.8s ease-in-out infinite;
-        }
-        @keyframes scan-corner-glow {
-            0%, 100% { opacity: 0.55; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.01); }
-        }
-
-        .scan-telemetry {
-            position: absolute;
-            left: 50%;
-            bottom: 1.25rem;
-            transform: translateX(-50%);
-            z-index: 30;
-            pointer-events: none;
-            width: min(92vw, 920px);
-            opacity: 0;
-            transition: opacity 180ms ease;
-        }
-        .scan-telemetry.visible { opacity: 1; }
-        .scan-telemetry-panel {
-            background: rgba(0, 6, 10, 0.72);
-            border: 1px solid rgba(0, 255, 255, 0.26);
-            backdrop-filter: blur(16px);
-            box-shadow: 0 0 30px rgba(0, 255, 255, 0.10);
-            border-radius: 1rem;
-            padding: 0.9rem 1rem;
-        }
-        .scan-kpi {
-            border: 1px solid rgba(0, 255, 255, 0.14);
-            border-radius: 0.85rem;
-            padding: 0.5rem 0.7rem;
-            background: rgba(255,255,255,0.02);
-        }
-        .scan-kpi-label {
-            font-size: 9px;
-            letter-spacing: 0.28em;
-            text-transform: uppercase;
-            color: rgba(103, 232, 249, 0.78);
-        }
-        .scan-kpi-value {
-            margin-top: 0.2rem;
-            font-size: 12px;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            color: #fff;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-        .scan-box {
-            position: absolute;
-            border: 1.5px solid rgba(0,255,255,0.92);
-            border-radius: 0.7rem;
-            box-shadow: 0 0 18px rgba(0,255,255,0.22);
-            pointer-events: none;
-        }
-        .scan-box::after {
-            content: "";
-            position: absolute;
-            inset: -1px;
-            border-radius: 0.7rem;
-            border: 1px solid rgba(255,255,255,0.08);
-        }
-        .scan-label {
-            position: absolute;
-            left: 0;
-            top: -1.5rem;
-            padding: 0.18rem 0.45rem;
-            font-size: 9px;
-            letter-spacing: 0.22em;
-            text-transform: uppercase;
-            background: rgba(0, 6, 10, 0.9);
-            border: 1px solid rgba(0,255,255,0.22);
-            border-radius: 999px;
-            color: #c6fbff;
-            white-space: nowrap;
-        }
-
-    </style>
+<meta charset=UTF-8>
+<meta name=viewport content="width=device-width, initial-scale=1.0">
+<title>Mark 85 - Verma Group Advanced AI HUD</title>
+<script src=https://cdn.tailwindcss.com></script>
+<script src=https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js crossorigin=anonymous></script>
+<script src=https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js crossorigin=anonymous></script>
+<script src=https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js crossorigin=anonymous></script>
+<style>body,html{margin:0;width:100vw;height:100vh;overflow:hidden;background:#010102;color:#0ff;font-family:'Courier New',Courier,monospace;user-select:none}.vignette{position:absolute;inset:0;box-shadow:inset 0 0 250px rgba(0,0,0,0.95);z-index:10;pointer-events:none}.grid-bg{position:absolute;inset:0;background-image:linear-gradient(rgba(0,255,255,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,255,0.02) 1px,transparent 1px);background-size:50px 50px;z-index:11;pointer-events:none;opacity:.5}.input_video{position:absolute;width:100%;height:100%;object-fit:cover;opacity:0}.output_canvas{position:absolute;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);filter:contrast(1.4) brightness(0.75);z-index:1;transition:filter .3s ease}.overlay_canvas{position:absolute;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);z-index:5;pointer-events:none}.thermal-mode{filter:contrast(1.8) brightness(0.9) saturate(2.5) hue-rotate(90deg)!important}.hud-ui{position:absolute;inset:0;z-index:20;pointer-events:none;opacity:0;transition:opacity .8s cubic-bezier(0.075,0.82,0.165,1);display:flex;flex-direction:column;justify-content:space-between;padding:2.5rem}.hud-visible{opacity:1}.sys-msg{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;z-index:50;transition:all .5s ease}.flash-overlay{position:absolute;inset:0;background:#fff;z-index:99;opacity:0;pointer-events:none}.flash-active{animation:flash-bang 1s cubic-bezier(0.1,0.8,0.3,1) forwards}.scan-line{position:absolute;top:0;left:0;width:100%;height:4px;background:rgba(0,255,255,0.8);box-shadow:0 0 20px 5px rgba(0,255,255,0.5);z-index:15;opacity:0;pointer-events:none}.scan-active{animation:scan-sweep 2.5s ease-in-out;opacity:1}@keyframes scan-sweep{0%{top:0;opacity:1}50%{top:100%;opacity:1}100%{top:0;opacity:0}}.friday-box{background:rgba(0,8,12,0.88);border:1px solid rgba(0,255,255,0.25);backdrop-blur:12px;box-shadow:0 0 30px rgba(0,255,255,0.08)}.terminal-scroll{max-height:120px;overflow:hidden;mask-image:linear-gradient(to top,transparent,black 20%)}@keyframes flash-bang{0%{opacity:1}20%{background:#0ff;opacity:.85}100%{opacity:0;background:transparent}}.shake{animation:screen-shake .2s ease-in-out infinite}.heavy-shake{animation:screen-shake-heavy .1s ease-in-out infinite}@keyframes screen-shake{0%,100%{transform:translate(0,0)}25%{transform:translate(-3px,2px)}75%{transform:translate(3px,-2px)}}@keyframes screen-shake-heavy{0%,100%{transform:translate(0,0)}25%{transform:translate(-8px,6px)}75%{transform:translate(8px,-6px)}}.reticle{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:120px;height:120px;border:1px dashed rgba(0,255,255,0.2);border-radius:50%;z-index:15;pointer-events:none;display:none}.reticle-inner{position:absolute;inset:15px;border:2px solid transparent;border-top-color:rgba(0,255,255,0.6);border-bottom-color:rgba(0,255,255,0.6);border-radius:50%;animation:spin 4s linear infinite}@keyframes spin{100%{transform:rotate(360deg)}}:root{--hud-glow:#0ff;--hud-text:0,255,255}.theme-glow{color:var(--hud-glow)}.theme-border{border-color:var(--hud-glow)}.scan-active-state .output_canvas,.scan-active-state .overlay_canvas{filter:contrast(1.1) brightness(1.3) saturate(1.08)}.scan-wash{position:absolute;inset:0;z-index:12;pointer-events:none;opacity:0;background:radial-gradient(circle at center,rgba(255,255,255,0.95) 0,rgba(255,255,255,0.72) 28%,rgba(255,255,255,0.30) 56%,rgba(0,0,0,0) 82%);mix-blend-mode:screen;transition:opacity 260ms ease}.scan-active-state .scan-wash{opacity:0;display:none;animation:none}@keyframes scan-wash-pulse{0%,100%{transform:scale(1);filter:brightness(1)}50%{transform:scale(1.02);filter:brightness(1.14)}}.scan-corners{position:absolute;inset:8%;z-index:13;pointer-events:none;opacity:0;transition:opacity 260ms ease}.scan-active-state .scan-corners{opacity:1}.scan-corners::before,.scan-corners::after{content:"";position:absolute;inset:0;border:2px solid rgba(255,255,255,0.18);border-radius:26px;clip-path:polygon(0 0,14% 0,14% 3%,3% 3%,3% 14%,0 14%,0 0)}.scan-corners::after{border-color:rgba(0,255,255,0.18);filter:blur(1px);animation:scan-corner-glow 1.8s ease-in-out infinite}@keyframes scan-corner-glow{0%,100%{opacity:.55;transform:scale(1)}50%{opacity:1;transform:scale(1.01)}}.scan-telemetry{position:absolute;left:50%;bottom:1.25rem;transform:translateX(-50%);z-index:30;pointer-events:none;width:min(92vw,920px);opacity:0;transition:opacity 180ms ease}.scan-telemetry.visible{opacity:1}.scan-telemetry-panel{background:rgba(0,6,10,0.72);border:1px solid rgba(0,255,255,0.26);backdrop-filter:blur(16px);box-shadow:0 0 30px rgba(0,255,255,0.10);border-radius:1rem;padding:.9rem 1rem}.scan-kpi{border:1px solid rgba(0,255,255,0.14);border-radius:.85rem;padding:.5rem .7rem;background:rgba(255,255,255,0.02)}.scan-kpi-label{font-size:9px;letter-spacing:.28em;text-transform:uppercase;color:rgba(103,232,249,0.78)}.scan-kpi-value{margin-top:.2rem;font-size:12px;font-weight:800;letter-spacing:.08em;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.scan-box{position:absolute;border:1.5px solid rgba(0,255,255,0.92);border-radius:.7rem;box-shadow:0 0 18px rgba(0,255,255,0.22);pointer-events:none}.scan-box::after{content:"";position:absolute;inset:-1px;border-radius:.7rem;border:1px solid rgba(255,255,255,0.08)}.scan-label{position:absolute;left:0;top:-1.5rem;padding:.18rem .45rem;font-size:9px;letter-spacing:.22em;text-transform:uppercase;background:rgba(0,6,10,0.9);border:1px solid rgba(0,255,255,0.22);border-radius:999px;color:#c6fbff;white-space:nowrap}</style>
 </head>
 <body>
-
-    <video class="input_video" autoplay playsinline></video>
-    <canvas class="output_canvas" id="main-canvas"></canvas>
-    <canvas class="overlay_canvas"></canvas>
-
-    <div class="vignette"></div>
-    <div class="grid-bg"></div>
-    <div id="flash" class="flash-overlay"></div>
-    <div id="scan-line" class="scan-line"></div>
-    <div id="scan-wash" class="scan-wash"></div>
-    <div id="scan-corners" class="scan-corners"></div>
-    <div id="fx-layer" class="fixed inset-0 pointer-events-none z-[55]"></div>
-    <div id="scan-telemetry" class="scan-telemetry">
-        <div class="scan-telemetry-panel">
-            <div class="grid grid-cols-2 md:grid-cols-6 gap-2">
-                <div class="scan-kpi">
-                    <div class="scan-kpi-label">OBJECT</div>
-                    <div id="scan-object" class="scan-kpi-value">WAITING</div>
-                </div>
-                <div class="scan-kpi">
-                    <div class="scan-kpi-label">SIZE</div>
-                    <div id="scan-size" class="scan-kpi-value">--</div>
-                </div>
-                <div class="scan-kpi">
-                    <div class="scan-kpi-label">GESTURE</div>
-                    <div id="scan-gesture" class="scan-kpi-value">--</div>
-                </div>
-                <div class="scan-kpi">
-                    <div class="scan-kpi-label">BODY</div>
-                    <div id="scan-body" class="scan-kpi-value">--</div>
-                </div>
-                <div class="scan-kpi">
-                    <div class="scan-kpi-label">DISTANCE</div>
-                    <div id="scan-distance" class="scan-kpi-value">--</div>
-                </div>
-                <div class="scan-kpi">
-                    <div class="scan-kpi-label">LIGHT</div>
-                    <div id="scan-light" class="scan-kpi-value">--</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div id="center-reticle" class="reticle">
-        <div class="reticle-inner theme-border"></div>
-        <div class="absolute inset-[45%] bg-cyan-400/30 rounded-full animate-ping"></div>
-    </div>
-
-    <div id="status-container" class="sys-msg">
-        <div class="text-3xl font-black tracking-[0.7em] text-white drop-shadow-[0_0_12px_#00ffff]">MARK 85 NEXUS</div>
-        <div id="sync-status" class="text-xs mt-4 text-cyan-400 tracking-widest uppercase animate-pulse">// SYSTEM ONLINE // AWAITING NEURAL LINK</div>
-    </div>
-
-    <div id="main-hud" class="hud-ui">
-        <div class="flex justify-between items-start w-full">
-            <div id="brand-panel" class="border-l-4 border-cyan-400 pl-4 bg-black/60 backdrop-blur-md py-4 pr-12 rounded-r-md border-b border-cyan-900/30">
-                <div class="text-[10px] text-cyan-500 tracking-[0.3em] font-bold">VERMA GROUP // ADVANCED DEFENSE</div>
-                <div class="text-3xl font-black text-white tracking-wider mt-1">CORE_PWR: <span id="power-val">100</span>%</div>
-                <div class="text-[10px] text-emerald-400 tracking-widest mt-1.5 font-mono flex items-center gap-2">
-                    <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                    SYNC STATE: ACTIVE & OPTIMIZED
-                </div>
-            </div>
-            
-            <div class="friday-box p-4 rounded-lg flex flex-col gap-2.5 max-w-sm pointer-events-auto relative w-80">
-                <div class="flex items-start gap-3">
-                    <div class="relative mt-1">
-                        <div id="friday-ping" class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping absolute"></div>
-                        <div id="friday-dot" class="w-2.5 h-2.5 rounded-full bg-cyan-500 transition-colors duration-300"></div>
-                    </div>
-                    <div class="flex-1">
-                        <div class="text-[11px] text-cyan-400 font-black tracking-widest uppercase flex justify-between">
-                            <span>F.R.I.D.A.Y. v6.0</span>
-                            <span class="text-[9px] text-cyan-600 font-mono" id="voice-indicator">STDBY</span>
-                        </div>
-                        <div id="friday-speech-text" class="text-xs text-white/90 mt-1.5 italic font-sans leading-relaxed transition-all duration-300">
-                            "Initializing neural patterns..."
-                        </div>
-                    </div>
-                </div>
-                <div class="border-t border-cyan-900/50 pt-2.5 mt-0.5">
-                    <div id="user-speech-text" class="text-[10px] text-cyan-500 font-mono tracking-wider truncate uppercase">
-                        > Systems initialized. Awaiting feedback... Use the TRACK SCAN button to scan or stop scanning.
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="flex items-center justify-between w-full h-auto my-auto">
-            <div class="text-[9px] text-cyan-500/70 font-mono bg-black/40 p-3 border border-cyan-900/20 rounded terminal-scroll w-56 flex flex-col gap-1" id="log-feed">
-                <div>[SYS_LOG] Core link established.</div>
-                <div>[SYS_LOG] Nanotech topology mapping...</div>
-            </div>
-            
-            <div id="flight-panel" class="hidden text-right font-mono bg-black/50 p-3 border border-orange-500/50 rounded-lg shadow-[0_0_15px_rgba(255,165,0,0.2)]">
-                <div class="text-[10px] tracking-widest text-orange-400 font-bold mb-1 animate-pulse">VECTOR BOOSTERS: ENGAGED</div>
-                <div class="text-[9px] text-cyan-400">ALTITUDE: <span class="text-white">AUTO_NAV</span></div>
-                <div class="text-[9px] text-cyan-400">THRUST VECTORS: <span class="text-white">STABILIZED</span></div>
-            </div>
-        </div>
-
-        <div class="flex justify-between items-end w-full">
-            <div class="flex flex-col gap-3">
-                <div class="text-[11px] text-cyan-400 bg-black/75 p-4 border border-cyan-900/40 leading-relaxed tracking-wide rounded-lg backdrop-blur-md max-w-sm">
-                    <span class="text-white font-black tracking-wider">// NEW COMMANDS</span><br>
-                    <div class="mt-2 text-cyan-500 font-mono text-[10px]">
-                        <span class="text-white">> "Run health scan" / "Check biometrics"</span><br>
-                        <span class="text-white">> "Unibeam" / "Blast them"</span><br>
-                        <span class="text-white">> "How are you Friday" / "Status report" / "Reload missiles" / "Track Scan" / "Analyze this"</span>
-                    </div>
-                </div>
-                <button id="track-scan-btn" class="pointer-events-auto self-start px-5 py-3 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-200 text-xs font-black tracking-[0.35em] uppercase shadow-[0_0_20px_rgba(0,255,255,0.15)] hover:bg-cyan-400/20 hover:shadow-[0_0_30px_rgba(0,255,255,0.3)] transition-all duration-200 active:scale-[0.98]">
-                    Track Scan
-                </button>
-            </div>
-            
-            <div id="weapon-panel" class="text-right border-r-4 border-cyan-400 pr-4 bg-black/60 backdrop-blur-md py-4 pl-12 rounded-l-md border-b border-cyan-900/30">
-                <div class="text-[10px] text-cyan-500 tracking-widest mb-1 font-bold uppercase">Micro-Missile Allocation</div>
-                <div id="missile-count" class="text-5xl font-black text-white drop-shadow-[0_0_12px_#00ffff]">24</div>
-                <div id="weapon-status" class="text-[9px] text-cyan-400 tracking-widest mt-1.5 uppercase font-mono">ORDNANCE STACK ONLINE</div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        const video = document.querySelector('.input_video');
-        const canvas = document.getElementById('main-canvas');
-        const ctx = canvas.getContext('2d', { alpha: false });
-        const overlayCanvas = document.querySelector('.overlay_canvas');
-        const overlayCtx = overlayCanvas.getContext('2d');
-
-        const MAX_MISSILES = 24;
-        const GEMINI_API_KEY = "AIzaSyBOwrEPdqKVBFjvsTYbP5E8pqNPFaPWPig";
-        const GEMINI_MODEL = "gemini-3.1-flash-lite";
-        const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-
-        let isSuitedUp = false;
-        let isDetecting = false;
-        let missiles = MAX_MISSILES;
-        let activeMissiles = [];
-        let particles = [];
-        let ripples = [];
-        let lastShieldState = false;
-        let lastRepulsorState = false;
-        let lastFlightState = false;
-        let unibeamCharging = false;
-        let powerCore = 100;
-        let isThermal = false;
-        let hudColor = '#00ffff';
-
-        let recognition;
-        let isFridaySpeaking = false;
-        let speechQueue = [];
-        let voicesReady = false;
-        let preferredFemaleVoice = null;
-        let visionBusy = false;
-        let armedOnce = false;
-        let scanModeActive = false;
-
-        function addLog(msg) {
-            const feed = document.getElementById('log-feed');
-            const log = document.createElement('div');
-            log.innerText = `[${new Date().toLocaleTimeString().split(' ')[0]}] ${msg}`;
-            feed.appendChild(log);
-            if (feed.children.length > 7) feed.removeChild(feed.children[0]);
-        }
-
-        function sanitizeEnglishResponse(text) {
-            if (!text) return "";
-            return String(text)
-                .replace(/\s+/g, " ")
-                .replace(/^[\"'`]+|[\"'`]+$/g, "")
-                .trim();
-        }
-
-        function normalizeCommand(raw) {
-            return String(raw || "")
-                .toLowerCase()
-                .replace(/[^a-z0-9\s]/g, " ")
-                .replace(/\s+/g, " ")
-                .trim();
-        }
-
-        function containsAny(text, phrases) {
-            return phrases.some(p => text.includes(p));
-        }
-
-        function syncMissileUI() {
-            document.getElementById('missile-count').innerText = missiles;
-        }
-
-        function setWeaponStatus(text, danger = false) {
-            const el = document.getElementById('weapon-status');
-            el.innerText = text;
-            el.className = danger
-                ? "text-[9px] text-rose-500 tracking-widest mt-1.5 uppercase font-mono animate-pulse"
-                : "text-[9px] text-cyan-400 tracking-widest mt-1.5 uppercase font-mono";
-        }
-
-        function spawnParticles(x, y, count = 12, palette = ['#00ffff', '#ffffff']) {
-            for (let i = 0; i < count; i++) {
-                if (particles.length > 240) particles.shift();
-                const angle = Math.random() * Math.PI * 2;
-                const speed = 0.5 + Math.random() * 2.8;
-                particles.push({
-                    x, y,
-                    vx: Math.cos(angle) * speed,
-                    vy: Math.sin(angle) * speed,
-                    life: 28 + Math.random() * 22,
-                    maxLife: 28 + Math.random() * 22,
-                    size: 1.2 + Math.random() * 2.6,
-                    color: palette[Math.floor(Math.random() * palette.length)]
-                });
-            }
-        }
-
-        function spawnRipple(x, y, color = '#00ffff') {
-            ripples.push({ x, y, radius: 0, maxRadius: 180, alpha: 0.82, color });
-            if (ripples.length > 18) ripples.shift();
-        }
-
-        function isScanLocked() {
-            return scanModeActive;
-        }
-
-        function setScanLocked(locked) {
-            scanModeActive = locked;
-            document.body.classList.toggle('scan-active-state', locked);
-            showScanTelemetry(locked);
-            if (locked) startTrackAnalysisLoop();
-            else stopTrackAnalysisLoop();
-
-            const button = document.getElementById('track-scan-btn');
-            if (button) {
-                button.disabled = false;
-                button.textContent = locked ? 'STOP SCAN' : 'TRACK SCAN';
-                button.style.opacity = '1';
-                button.style.cursor = 'pointer';
-                button.classList.toggle('ring-2', locked);
-                button.classList.toggle('ring-cyan-300/50', locked);
-            }
-
-            if (locked) {
-                document.getElementById('sync-status').innerText = "// TRACK SCAN ACTIVE // LIVE CAMERA MODE";
-                updateScanTelemetry({
-                    object: 'ANALYZING',
-                    size: '--',
-                    gesture: '--',
-                    body: 'SEARCHING',
-                    distance: '--',
-                    light: lightingLabel(sampleLightingLevel())
-                });
-                const feed = document.getElementById('log-feed');
-                if (feed) {
-                    const hint = document.createElement('div');
-                    hint.innerText = `[${new Date().toLocaleTimeString().split(' ')[0]}] Track scan engaged. Combat systems locked.`;
-                    feed.appendChild(hint);
-                    if (feed.children.length > 7) feed.removeChild(feed.children[0]);
-                }
-            } else {
-                document.getElementById('sync-status').innerText = isSuitedUp
-                    ? "// NEURAL LINK ESTABLISHED // READY FOR COMMANDS"
-                    : "// SYSTEM ONLINE // AWAITING NEURAL LINK";
-                document.getElementById('scan-line').classList.remove('scan-active');
-                document.getElementById('scan-object').innerText = 'WAITING';
-                document.getElementById('scan-size').innerText = '--';
-                document.getElementById('scan-gesture').innerText = '--';
-                document.getElementById('scan-body').innerText = '--';
-                document.getElementById('scan-distance').innerText = '--';
-                document.getElementById('scan-light').innerText = '--';
-            }
-        }
-
-        function playScanSweep() {
-            const line = document.getElementById('scan-line');
-            line.classList.add('scan-active');
-            setTimeout(() => line.classList.remove('scan-active'), 2600);
-
-            const rect = overlayCanvas.getBoundingClientRect();
-            const x = rect.left + rect.width / 2;
-            const y = rect.top + rect.height / 2;
-            spawnParticles(x, y, 20, ['#ffffff', '#00ffff', '#7dd3fc']);
-            spawnRipple(x, y, '#00ffff');
-            triggerFxLabel('TRACK SCAN', '#00ffff');
-            flashCenterPulse('#00ffff');
-        }
-
-        async function runTrackScan() {
-            if (visionBusy) return;
-
-            if (scanModeActive) {
-                setScanLocked(false);
-                triggerFxLabel('SCAN OFF', '#00ffff');
-                fridaySpeak("Track scan disabled.", true);
-                return;
-            }
-
-            setScanLocked(true);
-            playScanSweep();
-
-            try {
-                fridaySpeak("Track scan engaged. Live camera view is active. I am tracking body shape, gestures, size, and objects.", true);
-                analyzeTrackSnapshot();
-            } catch (error) {
-                console.error(error);
-                fridaySpeak("The scan was interrupted.", true);
-            }
-        }
-
-        function triggerFxLabel(text, color = '#00ffff') {
-            const layer = document.getElementById('fx-layer');
-            if (!layer) return;
-
-            const tag = document.createElement('div');
-            tag.className = 'absolute px-3 py-1 rounded-full text-[10px] font-black tracking-[0.35em] uppercase border backdrop-blur-md';
-            tag.style.left = '50%';
-            tag.style.top = '14%';
-            tag.style.transform = 'translate(-50%, 0)';
-            tag.style.color = color;
-            tag.style.borderColor = color;
-            tag.style.background = 'rgba(0,0,0,0.45)';
-            tag.style.boxShadow = `0 0 20px ${color}55`;
-            tag.textContent = text;
-            layer.appendChild(tag);
-            setTimeout(() => {
-                tag.style.transition = 'opacity 220ms ease, transform 220ms ease';
-                tag.style.opacity = '0';
-                tag.style.transform = 'translate(-50%, -10px)';
-                setTimeout(() => tag.remove(), 240);
-            }, 650);
-        }
-
-        function flashCenterPulse(color = '#00ffff') {
-            const layer = document.getElementById('fx-layer');
-            if (!layer) return;
-            const pulse = document.createElement('div');
-            pulse.className = 'absolute left-1/2 top-1/2 rounded-full border';
-            pulse.style.width = '16px';
-            pulse.style.height = '16px';
-            pulse.style.transform = 'translate(-50%, -50%) scale(1)';
-            pulse.style.borderColor = color;
-            pulse.style.boxShadow = `0 0 35px ${color}88`;
-            pulse.style.opacity = '0.95';
-            layer.appendChild(pulse);
-
-            const start = performance.now();
-            const tick = (now) => {
-                const t = Math.min(1, (now - start) / 450);
-                const scale = 1 + t * 10.5;
-                pulse.style.transform = `translate(-50%, -50%) scale(${scale})`;
-                pulse.style.opacity = String(0.95 * (1 - t));
-                if (t < 1) requestAnimationFrame(tick);
-                else pulse.remove();
-            };
-            requestAnimationFrame(tick);
-        }
-
-        function renderVisualEffects() {
-            overlayCtx.save();
-
-            for (let i = particles.length - 1; i >= 0; i--) {
-                const p = particles[i];
-                p.x += p.vx;
-                p.y += p.vy;
-                p.vx *= 0.986;
-                p.vy *= 0.986;
-                p.life -= 1;
-
-                const alpha = Math.max(0, p.life / p.maxLife);
-                overlayCtx.globalAlpha = alpha;
-                overlayCtx.beginPath();
-                overlayCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                overlayCtx.fillStyle = p.color;
-                overlayCtx.shadowBlur = 18;
-                overlayCtx.shadowColor = p.color;
-                overlayCtx.fill();
-
-                if (p.life <= 0) particles.splice(i, 1);
-            }
-
-            for (let i = ripples.length - 1; i >= 0; i--) {
-                const r = ripples[i];
-                r.radius += 5.7;
-                r.alpha *= 0.964;
-                overlayCtx.globalAlpha = r.alpha;
-                overlayCtx.beginPath();
-                overlayCtx.arc(r.x, r.y, r.radius, 0, Math.PI * 2);
-                overlayCtx.lineWidth = 2;
-                overlayCtx.strokeStyle = r.color;
-                overlayCtx.shadowBlur = 22;
-                overlayCtx.shadowColor = r.color;
-                overlayCtx.stroke();
-
-                if (r.radius > r.maxRadius || r.alpha < 0.03) ripples.splice(i, 1);
-            }
-
-            overlayCtx.restore();
-            overlayCtx.globalAlpha = 1;
-        }
-
-        function refillMissiles(announce = true) {
-            missiles = MAX_MISSILES;
-            syncMissileUI();
-            setWeaponStatus('ORDNANCE STACK ONLINE', false);
-
-            const rect = document.getElementById('weapon-panel').getBoundingClientRect();
-            const cx = rect.left + rect.width / 2;
-            const cy = rect.top + rect.height / 2;
-            spawnParticles(cx, cy, 34, ['#ffffff', '#00ffff', '#7dd3fc']);
-            spawnRipple(cx, cy, '#00ffff');
-            triggerFxLabel('MISSILES RELOADED', '#00ffff');
-
-            if (announce) {
-                fridaySpeak("Missile bay reloaded. Full ordnance capacity restored.", true);
-            }
-        }
-
-        function getVideoFrameBase64() {
-            try {
-                const temp = document.createElement('canvas');
-                const width = video.videoWidth || canvas.width || 1280;
-                const height = video.videoHeight || canvas.height || 720;
-                temp.width = width;
-                temp.height = height;
-                const tctx = temp.getContext('2d');
-                tctx.drawImage(video, 0, 0, width, height);
-                return temp.toDataURL('image/jpeg', 0.72).split(',')[1];
-            } catch (e) {
-                console.error('Frame capture failed:', e);
-                return "";
-            }
-        }
-
-        async function askGeminiEnglish(userText) {
-            const prompt = `
-You are F.R.I.D.A.Y. — an advanced AI assistant.
-Rules:
-1) Reply only in English.
-2) Keep answers clear, direct, accurate, and useful.
-3) Avoid unnecessary filler, long introductions, and meta-text.
-4) If the question is ambiguous, ask one short clarifying question.
-5) Keep responses concise unless more detail is needed.
-
-User message:
-${userText}
-`;
-            try {
-                const res = await fetch(GEMINI_ENDPOINT, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-goog-api-key': GEMINI_API_KEY
-                    },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [{ text: prompt }]
-                        }],
-                        generationConfig: {
-                            temperature: 0.2,
-                            topP: 0.9,
-                            maxOutputTokens: 220,
-                            thinkingConfig: { thinkingLevel: "low" }
-                        }
-                    })
-                });
-
-                const data = await res.json();
-                const raw = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join(' ').trim();
-                return sanitizeEnglishResponse(raw || "");
-            } catch (error) {
-                console.error('Gemini error:', error);
-                return "";
-            }
-        }
-
-        async function analyzeSceneWithGemini(userText) {
-            if (visionBusy) return "Vision analysis is already running.";
-            visionBusy = true;
-            document.getElementById('sync-status').innerText = "// VISION ARRAY ACTIVE // ANALYZING FRAME...";
-
-            try {
-                const imageBase64 = getVideoFrameBase64();
-                if (!imageBase64) {
-                    return "I could not capture a clear frame. Move the object closer to the camera and try again.";
-                }
-
-                const prompt = `
-You are F.R.I.D.A.Y. inside a futuristic HUD.
-Analyze the image carefully and answer in English only.
-
-Rules:
-- Identify the main visible object first.
-- If one clear object is present, respond in the exact style: "This is an apple." or "This is a bottle."
-- If the object is unclear, say so clearly and honestly.
-- If multiple objects are visible, name the most important one first and mention the others briefly.
-- Keep the answer short, direct, and confident.
-- Do not mention that you are an AI unless the image is unclear.
-- Favor the most likely object if lighting is bright but not perfect.
-
-User request: ${userText}
-`;
-                const res = await fetch(GEMINI_ENDPOINT, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-goog-api-key': GEMINI_API_KEY
-                    },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: prompt },
-                                {
-                                    inline_data: {
-                                        mime_type: 'image/jpeg',
-                                        data: imageBase64
-                                    }
-                                }
-                            ]
-                        }],
-                        generationConfig: {
-                            temperature: 0.1,
-                            topP: 0.9,
-                            maxOutputTokens: 260,
-                            thinkingConfig: { thinkingLevel: "low" }
-                        }
-                    })
-                });
-
-                const data = await res.json();
-                const raw = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join(' ').trim();
-                return sanitizeEnglishResponse(raw || "") || "I could not analyze the scene clearly.";
-            } catch (error) {
-                console.error('Vision error:', error);
-                return "The vision engine hit an error while analyzing the scene.";
-            } finally {
-                visionBusy = false;
-                document.getElementById('sync-status').innerText = isSuitedUp
-                    ? "// NEURAL LINK ESTABLISHED // READY FOR COMMANDS"
-                    : "// SYSTEM ONLINE // AWAITING NEURAL LINK";
-            }
-        }
-
-        function getPreferredFemaleVoice() {
-            const voices = window.speechSynthesis?.getVoices?.() || [];
-            if (!voices.length) return null;
-
-            const femaleHints = [
-                'female', 'samantha', 'victoria', 'aria', 'karen', 'zira', 'google uk english female',
-                'google us english', 'microsoft aria', 'microsoft zira', 'siri', 'susan', 'ava', 'emma'
-            ];
-
-            return voices.find(v => femaleHints.some(h =>
-                v.name.toLowerCase().includes(h) || v.lang.toLowerCase().includes(h)
-            )) || voices.find(v => /en/i.test(v.lang)) || voices[0] || null;
-        }
-
-        function refreshVoices() {
-            preferredFemaleVoice = getPreferredFemaleVoice();
-            voicesReady = true;
-        }
-
-        if ('speechSynthesis' in window) {
-            refreshVoices();
-            window.speechSynthesis.onvoiceschanged = refreshVoices;
-        }
-
-        function updateVoiceIndicator(status, colorClass) {
-            const ind = document.getElementById('voice-indicator');
-            const dot = document.getElementById('friday-dot');
-            const ping = document.getElementById('friday-ping');
-            ind.innerText = status;
-            dot.className = `w-2.5 h-2.5 rounded-full ${colorClass}`;
-            ping.className = `w-2.5 h-2.5 rounded-full ${colorClass} animate-ping absolute`;
-        }
-
-        function startRecognitionSafe(delay = 120) {
-            if (!recognition || !isSuitedUp || isFridaySpeaking) return;
-            setTimeout(() => {
-                if (!recognition || !isSuitedUp || isFridaySpeaking) return;
-                try { recognition.start(); } catch (e) {}
-            }, delay);
-        }
-
-        function fridaySpeak(text, interrupt = false) {
-            const output = String(text || "").trim();
-            if (!output) return;
-
-            document.getElementById('friday-speech-text').innerText = `"${output}"`;
-            addLog(`FRIDAY: ${output}`);
-
-            if (!('speechSynthesis' in window)) return;
-
-            if (isFridaySpeaking && !interrupt) {
-                speechQueue.push(output);
-                return;
-            }
-
-            isFridaySpeaking = true;
-            updateVoiceIndicator("SPEAKING", "bg-amber-400");
-            if (recognition) try { recognition.stop(); } catch (e) {}
-
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(output);
-            utterance.rate = 1.02;
-            utterance.pitch = 1.08;
-            utterance.lang = 'en-US';
-
-            if (preferredFemaleVoice) utterance.voice = preferredFemaleVoice;
-
-            utterance.onend = () => {
-                isFridaySpeaking = false;
-                updateVoiceIndicator("LISTENING", "bg-emerald-400");
-                if (speechQueue.length) {
-                    const next = speechQueue.shift();
-                    fridaySpeak(next, true);
-                    return;
-                }
-                startRecognitionSafe(90);
-            };
-
-            utterance.onerror = () => {
-                isFridaySpeaking = false;
-                updateVoiceIndicator("LISTENING", "bg-emerald-400");
-                startRecognitionSafe(140);
-            };
-
-            window.speechSynthesis.speak(utterance);
-        }
-
-        function initVoiceRecognition() {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SpeechRecognition) return;
-
-            recognition = new SpeechRecognition();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.maxAlternatives = 3;
-            recognition.lang = 'en-IN';
-
-            recognition.onstart = () => {
-                if (!isFridaySpeaking) updateVoiceIndicator("LISTENING", "bg-emerald-400");
-            };
-
-            recognition.onend = () => {
-                if (isSuitedUp && !isFridaySpeaking) {
-                    startRecognitionSafe(80);
-                } else if (!isSuitedUp) {
-                    updateVoiceIndicator("STDBY", "bg-cyan-500");
-                }
-            };
-
-            recognition.onerror = () => {
-                if (isSuitedUp && !isFridaySpeaking) {
-                    startRecognitionSafe(160);
-                }
-            };
-
-            recognition.onresult = (event) => {
-                let finalText = '';
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    if (event.results[i].isFinal) {
-                        finalText += ' ' + event.results[i][0].transcript;
-                    }
-                }
-                const command = normalizeCommand(finalText);
-                if (!command) return;
-
-                document.getElementById('user-speech-text').innerText = `> "${command.toUpperCase()}"`;
-
-                if (scanModeActive) {
-                    return;
-                }
-
-                processBilingualComms(command);
-            };
-        }
-
-        function launchMissile(side = 'left', startPoint = null) {
-            const w = overlayCanvas.width;
-            const h = overlayCanvas.height;
-
-            const origin = startPoint || (side === 'left'
-                ? { x: w * 0.435, y: h * 0.605 }
-                : { x: w * 0.565, y: h * 0.605 });
-
-            const targetSpread = side === 'left'
-                ? -2.6 - Math.random() * 1.5
-                : 2.6 + Math.random() * 1.5;
-
-            activeMissiles.push({
-                x: origin.x,
-                y: origin.y,
-                vx: targetSpread,
-                vy: -5.4 - Math.random() * 0.9,
-                life: 132,
-                trail: [],
-                side
-            });
-
-            spawnParticles(origin.x, origin.y, 22, ['#ffffff', '#00ffff', '#60a5fa']);
-            spawnRipple(origin.x, origin.y, '#00ffff');
-            triggerFxLabel('ARM LAUNCH', '#00ffff');
-            playFX('missile');
-        }
-
-        async function processBilingualComms(cmd) {
-            const command = normalizeCommand(cmd);
-            if (!command) return;
-
-            if (isScanLocked() && !containsAny(command, ['track scan', 'stop scan', 'scan off', 'disable scan'])) {
-                triggerFxLabel("SCAN LOCKED", "#00ffff");
-                fridaySpeak("Scanning is active. Use the button to stop it.", true);
-                return;
-            }
-
-            triggerFxLabel("COMMAND ACCEPTED", hudColor);
-            flashCenterPulse(hudColor);
-            spawnRipple(window.innerWidth / 2, window.innerHeight / 2, hudColor);
-            spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 10, [hudColor, '#ffffff']);
-
-            if (containsAny(command, [
-                'refill missile', 'refill missiles', 'reload missile', 'reload missiles',
-                'rearm missile', 'rearm missiles', 'missile refill', 'replenish missiles',
-                'reload ordnance', 'ordnance reload', 'missiles full', 'reset missiles',
-                'missile reload', 'arm missiles'
-            ])) {
-                refillMissiles(true);
-                return;
-            }
-
-            if (containsAny(command, [
-                'track scan', 'scan object', 'analyze this', 'analyze object', 'analyse object', 'analyze the object',
-                'what do you see', 'what is this', 'identify this', 'identify object',
-                'look around', 'scan surroundings', 'scan the room', 'inspect object',
-                'describe this', 'recognize object', 'object analysis', 'vision scan'
-            ])) {
-                if (!scanModeActive) {
-                    await runTrackScan();
-                } else {
-                    fridaySpeak("Track scan is already active. Use the button to stop scanning.", true);
-                }
-                return;
-            }
-
-            let reply = "";
-            let handledLocally = false;
-
-            if (containsAny(command, ['scan', 'health', 'biometric', 'diagnostic', 'vitals', 'full scan'])) {
-                document.getElementById('scan-line').classList.add('scan-active');
-                playFX('suit');
-                spawnRipple(window.innerWidth / 2, window.innerHeight / 2, '#00ffff');
-                setTimeout(() => document.getElementById('scan-line').classList.remove('scan-active'), 2500);
-                reply = "Health scan started. Your vitals are stable, and the core temperature is within safe range.";
-                handledLocally = true;
-            }
-            else if (containsAny(command, ['unibeam', 'beam', 'blast', 'fire beam'])) {
-                reply = "Unibeam routing is ready. Cross both hands on your chest to fire.";
-                handledLocally = true;
-            }
-            else if (containsAny(command, ['status report', 'status', 'report', 'suit status', 'system status'])) {
-                reply = `All systems are green, Boss. Matrix core power is at ${Math.floor(powerCore)} percent and missile count is ${missiles}.`;
-                handledLocally = true;
-            }
-            else if (containsAny(command, ['how are you', 'how is friday', 'friday status'])) {
-                reply = "I am functioning at full capacity, Boss. The advanced suit stack is stable.";
-                handledLocally = true;
-            }
-            else if (containsAny(command, ['hello', 'hi friday', 'friday', 'listen', 'wake up', 'stay awake'])) {
-                reply = "Online and ready, Sir. I am listening.";
-                handledLocally = true;
-            }
-            else if (containsAny(command, ['charge', 'power up', 'full power', 'boost power'])) {
-                powerCore = 100;
-                document.getElementById('power-val').innerText = powerCore;
-                spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 24, ['#00ffff', '#ffffff']);
-                reply = "Nanotech energy array is fully optimized. Power grid is at 100 percent.";
-                handledLocally = true;
-            }
-            else if (containsAny(command, ['stealth mode', 'silent mode', 'ghost mode'])) {
-                changeHUDTheme('#a855f7');
-                triggerFxLabel('STEALTH ONLINE', '#a855f7');
-                reply = "Stealth configuration loaded. Visual signatures minimized.";
-                handledLocally = true;
-            }
-            else if (containsAny(command, ['combat mode', 'danger', 'red alert'])) {
-                changeHUDTheme('#ef4444');
-                triggerFxLabel('COMBAT READY', '#ef4444');
-                reply = "Combat configuration engaged.";
-                handledLocally = true;
-            }
-            else if (containsAny(command, ['normal mode', 'cyan mode', 'restore color', 'restore system', 'normal'])) {
-                changeHUDTheme('#00ffff');
-                triggerFxLabel('STANDARD MODE', '#00ffff');
-                reply = "Standard tactical blueprint restored.";
-                handledLocally = true;
-            }
-            else if (containsAny(command, ['thermal mode', 'night vision', 'infrared'])) {
-                isThermal = !isThermal;
-                if (isThermal) {
-                    canvas.classList.add('thermal-mode');
-                    triggerFxLabel('THERMAL ON', '#f59e0b');
-                    reply = "Infrared spectral grid activated.";
-                } else {
-                    canvas.classList.remove('thermal-mode');
-                    triggerFxLabel('THERMAL OFF', '#00ffff');
-                    reply = "Standard optical mode has been restored.";
-                }
-                handledLocally = true;
-            }
-            else if (containsAny(command, ['calibrate suit', 'diagnostics', 'system reboot', 'reboot suit', 'restart suit'])) {
-                changeHUDTheme('#00ffff');
-                document.getElementById('sync-status').innerText = "// SYSTEM CALIBRATION COMPLETE // ALL NODES STABLE";
-                spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 18, ['#00ffff', '#7dd3fc', '#ffffff']);
-                reply = "Suit recalibration complete. All systems are stable and synchronized.";
-                handledLocally = true;
-            }
-
-            if (!handledLocally) {
-                const geminiReply = await askGeminiEnglish(command);
-                const fallbackChoices = [
-                    "Understood, Boss. I am working on it now.",
-                    "Information received. I am handling it clearly in English.",
-                    "Okay, Boss. Your instruction has been processed."
-                ];
-                reply = geminiReply || fallbackChoices[Math.floor(Math.random() * fallbackChoices.length)];
-            }
-
-            fridaySpeak(reply);
-        }
-
-        function changeHUDTheme(hex) {
-            hudColor = hex;
-            document.documentElement.style.setProperty('--hud-glow', hex);
-            document.getElementById('brand-panel').style.borderColor = hex;
-            document.getElementById('weapon-panel').style.borderColor = hex;
-            document.getElementById('center-reticle').style.borderColor = hex;
-        }
-
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-        function playFX(type) {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-
-            const now = audioCtx.currentTime;
-
-            if (type === 'suit') {
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(55, now);
-                osc.frequency.exponentialRampToValueAtTime(920, now + 1.1);
-                gain.gain.setValueAtTime(0, now);
-                gain.gain.linearRampToValueAtTime(0.3, now + 0.08);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 1.1);
-                osc.start(now);
-                osc.stop(now + 1.1);
-            } else if (type === 'repulsor') {
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(220, now);
-                osc.frequency.exponentialRampToValueAtTime(1700, now + 0.2);
-                gain.gain.setValueAtTime(0, now);
-                gain.gain.linearRampToValueAtTime(0.16, now + 0.02);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-                osc.start(now);
-                osc.stop(now + 0.2);
-            } else if (type === 'missile') {
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(760, now);
-                osc.frequency.exponentialRampToValueAtTime(120, now + 0.38);
-                gain.gain.setValueAtTime(0, now);
-                gain.gain.linearRampToValueAtTime(0.18, now + 0.03);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.38);
-                osc.start(now);
-                osc.stop(now + 0.38);
-            } else if (type === 'unibeam') {
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(110, now);
-                osc.frequency.exponentialRampToValueAtTime(860, now + 0.5);
-                gain.gain.setValueAtTime(0, now);
-                gain.gain.linearRampToValueAtTime(0.44, now + 0.08);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.95);
-                osc.start(now);
-                osc.stop(now + 0.95);
-            }
-        }
-
-        function resize() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            overlayCanvas.width = window.innerWidth;
-            overlayCanvas.height = window.innerHeight;
-        }
-        window.addEventListener('resize', resize);
-        resize();
-
-        function triggerSuitUp() {
-            isSuitedUp = true;
-            document.getElementById('status-container').style.opacity = '0';
-            document.getElementById('center-reticle').style.display = 'block';
-            document.getElementById('flash').classList.add('flash-active');
-            document.body.classList.add('hud-ready');
-            playFX('suit');
-            addLog("Neural connection locked.");
-            triggerFxLabel("HUD LINKED", '#00ffff');
-            spawnParticles(window.innerWidth / 2, window.innerHeight / 2, 20, ['#00ffff', '#ffffff']);
-
-            setTimeout(() => {
-                document.getElementById('main-hud').classList.add('hud-visible');
-                fridaySpeak("Welcome back, Boss. Mark Eighty-Five systems are calibrated. I am ready for your command.", true);
-                triggerFxLabel("VISION ONLINE", "#00ffff");
-                startRecognitionSafe(120);
-            }, 600);
-        }
-
-        function drawArmorPlates(ctx, lm, w, h, scale) {
-            ctx.save();
-            ctx.strokeStyle = hudColor + 'b3';
-            ctx.lineWidth = 2;
-            ctx.fillStyle = 'rgba(0, 15, 25, 0.25)';
-
-            const shL = { x: lm[11].x * w, y: lm[11].y * h };
-            const shR = { x: lm[12].x * w, y: lm[12].y * h };
-            const chestX = (shL.x + shR.x) / 2;
-            const chestY = (shL.y + shR.y) / 2 + 25;
-
-            ctx.beginPath();
-            ctx.moveTo(shL.x, shL.y);
-            ctx.lineTo(chestX, chestY - 10);
-            ctx.lineTo(shR.x, shR.y);
-            ctx.lineTo(shR.x - 25 * scale, shR.y + 45 * scale);
-            ctx.lineTo(chestX, chestY + 55 * scale);
-            ctx.lineTo(shL.x + 25 * scale, shL.y + 45 * scale);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-
-            if (lm[0].visibility > 0.7) {
-                const headX = lm[0].x * w;
-                const headY = lm[0].y * h;
-                ctx.beginPath();
-                ctx.arc(headX, headY, 28 * scale, 0, Math.PI * 2);
-                ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-                ctx.stroke();
-                ctx.strokeStyle = hudColor;
-                ctx.strokeRect(headX - 18 * scale, headY - 18 * scale, 36 * scale, 36 * scale);
-            }
-            ctx.restore();
-        }
-
-        function drawArcReactor(x, y, size) {
-            overlayCtx.save();
-            const pulse = 1 + Math.sin(performance.now() / 180) * 0.08;
-            const outer = size * pulse;
-
-            overlayCtx.beginPath();
-            for (let i = 0; i < 6; i++) {
-                const angle = (Math.PI / 3) * i + performance.now() / 2500;
-                overlayCtx[i === 0 ? 'moveTo' : 'lineTo'](x + outer * Math.cos(angle), y + outer * Math.sin(angle));
-            }
-            overlayCtx.closePath();
-            overlayCtx.lineWidth = 3;
-            overlayCtx.strokeStyle = hudColor;
-            overlayCtx.shadowBlur = 26;
-            overlayCtx.shadowColor = hudColor;
-            overlayCtx.stroke();
-            overlayCtx.fillStyle = 'rgba(0, 255, 255, 0.10)';
-            overlayCtx.fill();
-
-            overlayCtx.beginPath();
-            overlayCtx.arc(x, y, outer * 0.42, 0, Math.PI * 2);
-            overlayCtx.fillStyle = '#ffffff';
-            overlayCtx.shadowBlur = 30;
-            overlayCtx.shadowColor = hudColor;
-            overlayCtx.fill();
-
-            overlayCtx.beginPath();
-            overlayCtx.arc(x, y, outer * 0.72, 0, Math.PI * 2);
-            overlayCtx.lineWidth = 1.5;
-            overlayCtx.strokeStyle = 'rgba(255,255,255,0.28)';
-            overlayCtx.stroke();
-            overlayCtx.restore();
-        }
-
-        function drawThruster(x, y, size, isFlight) {
-            overlayCtx.save();
-            if (isFlight) {
-                const grad = overlayCtx.createLinearGradient(x, y, x, y + size * 5);
-                grad.addColorStop(0, '#ffffff');
-                grad.addColorStop(0.15, '#a5f3fc');
-                grad.addColorStop(0.35, '#00ffff');
-                grad.addColorStop(0.7, '#ff8c00');
-                grad.addColorStop(1, 'transparent');
-                overlayCtx.fillStyle = grad;
-                overlayCtx.shadowBlur = 28;
-                overlayCtx.shadowColor = '#00ffff';
-                overlayCtx.beginPath();
-                overlayCtx.moveTo(x - size * 0.9, y + size * 0.2);
-                overlayCtx.lineTo(x + size * 0.9, y + size * 0.2);
-                overlayCtx.lineTo(x, y + size * 5.2);
-                overlayCtx.closePath();
-                overlayCtx.fill();
-            } else {
-                overlayCtx.beginPath();
-                overlayCtx.arc(x, y, size, 0, Math.PI * 2);
-                overlayCtx.strokeStyle = hudColor;
-                overlayCtx.lineWidth = 2;
-                overlayCtx.shadowBlur = 20;
-                overlayCtx.shadowColor = hudColor;
-                overlayCtx.stroke();
-                overlayCtx.beginPath();
-                overlayCtx.arc(x, y, size * 0.35, 0, Math.PI * 2);
-                overlayCtx.fillStyle = 'rgba(0, 255, 255, 0.55)';
-                overlayCtx.shadowBlur = 18;
-                overlayCtx.shadowColor = '#ffffff';
-                overlayCtx.fill();
-            }
-            overlayCtx.restore();
-        }
-
-        function drawUnibeam(x, y, h) {
-            overlayCtx.save();
-            const width = 160;
-            const pulse = 1 + Math.sin(performance.now() / 120) * 0.05;
-            const grad = overlayCtx.createLinearGradient(x - width / 2, y, x + width / 2, y);
-            grad.addColorStop(0, 'transparent');
-            grad.addColorStop(0.18, 'rgba(0, 255, 255, 0.45)');
-            grad.addColorStop(0.4, '#ffffff');
-            grad.addColorStop(0.6, '#ffffff');
-            grad.addColorStop(0.82, 'rgba(0, 255, 255, 0.45)');
-            grad.addColorStop(1, 'transparent');
-
-            overlayCtx.fillStyle = grad;
-            overlayCtx.shadowBlur = 58;
-            overlayCtx.shadowColor = '#00ffff';
-            overlayCtx.fillRect(x - width / 2, y - 50, width, h * pulse);
-
-            overlayCtx.beginPath();
-            overlayCtx.arc(x, y, 24 * pulse, 0, Math.PI * 2);
-            overlayCtx.strokeStyle = '#ffffff';
-            overlayCtx.lineWidth = 2;
-            overlayCtx.stroke();
-            overlayCtx.restore();
-        }
-
-        function drawShield(x, y, size) {
-            overlayCtx.save();
-            const grad = overlayCtx.createRadialGradient(x, y, size * 0.1, x, y, size);
-            grad.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
-            grad.addColorStop(0.55, hudColor + '88');
-            grad.addColorStop(1, 'transparent');
-
-            overlayCtx.beginPath();
-            overlayCtx.arc(x, y, size, 0, Math.PI * 2);
-            overlayCtx.fillStyle = grad;
-            overlayCtx.shadowBlur = 20;
-            overlayCtx.shadowColor = hudColor;
-            overlayCtx.fill();
-
-            overlayCtx.beginPath();
-            overlayCtx.arc(x, y, size * 0.72, 0, Math.PI * 2);
-            overlayCtx.strokeStyle = 'rgba(255,255,255,0.25)';
-            overlayCtx.lineWidth = 1.6;
-            overlayCtx.stroke();
-            overlayCtx.restore();
-        }
-
-        function drawMissile(missile) {
-            const angle = Math.atan2(missile.vy, missile.vx);
-            const trail = missile.trail || [];
-            for (let i = 1; i < trail.length; i++) {
-                const a = i / trail.length;
-                overlayCtx.globalAlpha = a * 0.7;
-                overlayCtx.beginPath();
-                overlayCtx.moveTo(trail[i - 1].x, trail[i - 1].y);
-                overlayCtx.lineTo(trail[i].x, trail[i].y);
-                overlayCtx.lineWidth = 1.2 + a * 5.5;
-                overlayCtx.strokeStyle = `rgba(255,255,255,${0.12 + a * 0.72})`;
-                overlayCtx.shadowBlur = 18;
-                overlayCtx.shadowColor = '#00ffff';
-                overlayCtx.stroke();
-            }
-
-            overlayCtx.save();
-            overlayCtx.translate(missile.x, missile.y);
-            overlayCtx.rotate(angle + Math.PI / 2);
-
-            const bodyGrad = overlayCtx.createLinearGradient(0, -16, 0, 18);
-            bodyGrad.addColorStop(0, '#ffffff');
-            bodyGrad.addColorStop(0.25, '#00ffff');
-            bodyGrad.addColorStop(1, '#0f172a');
-
-            overlayCtx.beginPath();
-            if (typeof overlayCtx.roundRect === 'function') {
-                overlayCtx.roundRect(-4, -16, 8, 26, 4);
-            } else {
-                overlayCtx.rect(-4, -16, 8, 26);
-            }
-            overlayCtx.fillStyle = bodyGrad;
-            overlayCtx.shadowBlur = 18;
-            overlayCtx.shadowColor = '#00ffff';
-            overlayCtx.fill();
-
-            overlayCtx.beginPath();
-            overlayCtx.moveTo(-7, 6);
-            overlayCtx.lineTo(0, 22);
-            overlayCtx.lineTo(7, 6);
-            overlayCtx.closePath();
-            overlayCtx.fillStyle = 'rgba(255,140,0,0.88)';
-            overlayCtx.shadowBlur = 14;
-            overlayCtx.shadowColor = '#ff8c00';
-            overlayCtx.fill();
-
-            overlayCtx.restore();
-        }
-
-
-        const probeCanvas = document.createElement('canvas');
-        const probeCtx = probeCanvas.getContext('2d', { willReadFrequently: true });
-
-        let latestPoseLandmarks = null;
-        let latestHandsLandmarks = [];
-        let latestHandedness = [];
-        let scanAnalysisTimer = null;
-        let scanAnalysisInFlight = false;
-        let lastLightingSample = { value: 128, ts: 0 };
-
-        function clamp(value, min, max) {
-            return Math.max(min, Math.min(max, value));
-        }
-
-        function showScanTelemetry(visible) {
-            const panel = document.getElementById('scan-telemetry');
-            if (!panel) return;
-            panel.classList.toggle('visible', !!visible);
-        }
-
-        function updateScanTelemetry(data = {}) {
-            const values = {
-                object: data.object ?? 'WAITING',
-                size: data.size ?? '--',
-                gesture: data.gesture ?? '--',
-                body: data.body ?? '--',
-                distance: data.distance ?? '--',
-                light: data.light ?? '--'
-            };
-
-            const bindings = {
-                object: 'scan-object',
-                size: 'scan-size',
-                gesture: 'scan-gesture',
-                body: 'scan-body',
-                distance: 'scan-distance',
-                light: 'scan-light'
-            };
-
-            for (const [key, id] of Object.entries(bindings)) {
-                const el = document.getElementById(id);
-                if (el) el.innerText = String(values[key]);
-            }
-        }
-
-        function boundsFromLandmarks(landmarks, w, h, minVisibility = 0.35) {
-            const points = (landmarks || []).filter(p => (p.visibility ?? 1) >= minVisibility);
-            if (!points.length) return null;
-
-            let minX = 1, minY = 1, maxX = 0, maxY = 0;
-            for (const p of points) {
-                minX = Math.min(minX, p.x);
-                minY = Math.min(minY, p.y);
-                maxX = Math.max(maxX, p.x);
-                maxY = Math.max(maxY, p.y);
-            }
-
-            const padX = clamp((maxX - minX) * 0.12, 0.015, 0.06);
-            const padY = clamp((maxY - minY) * 0.14, 0.02, 0.08);
-
-            const x = clamp((minX - padX) * w, 0, w);
-            const y = clamp((minY - padY) * h, 0, h);
-            const width = clamp((maxX - minX + padX * 2) * w, 20, w - x);
-            const height = clamp((maxY - minY + padY * 2) * h, 20, h - y);
-
-            return { x, y, width, height };
-        }
-
-        function labelFromHand(hand, handednessLabel = '') {
-            const wrist = hand[0];
-            const thumbTip = hand[4], thumbIp = hand[3];
-            const indexTip = hand[8], indexPip = hand[6];
-            const middleTip = hand[12], middlePip = hand[10];
-            const ringTip = hand[16], ringPip = hand[14];
-            const pinkyTip = hand[20], pinkyPip = hand[18];
-
-            const indexExtended = indexTip.y < indexPip.y;
-            const middleExtended = middleTip.y < middlePip.y;
-            const ringExtended = ringTip.y < ringPip.y;
-            const pinkyExtended = pinkyTip.y < pinkyPip.y;
-            const thumbExtended = handednessLabel.toLowerCase().includes('right')
-                ? thumbTip.x > thumbIp.x
-                : thumbTip.x < thumbIp.x;
-
-            const extendedCount = [indexExtended, middleExtended, ringExtended, pinkyExtended].filter(Boolean).length;
-            const curledCount = 4 - extendedCount;
-
-            const thumbUpLike = thumbExtended && Math.abs(thumbTip.y - wrist.y) > 0.02 && thumbTip.y < wrist.y;
-            const fistLike = curledCount >= 3 && Math.hypot(indexTip.x - wrist.x, indexTip.y - wrist.y) < 0.16;
-            const openLike = extendedCount >= 3 && !fistLike;
-            const pointLike = indexExtended && !middleExtended && !ringExtended && !pinkyExtended;
-            if (thumbUpLike && curledCount >= 3) return 'THUMBS UP';
-            if (pointLike) return 'POINTING';
-            if (fistLike) return 'FIST';
-            if (openLike) return 'OPEN HAND';
-            return 'UNKNOWN';
-        }
-
-        function estimateSizeClass(box, frameW, frameH) {
-            if (!box) return '--';
-            const areaRatio = (box.width * box.height) / (frameW * frameH);
-            if (areaRatio < 0.035) return 'SMALL';
-            if (areaRatio < 0.12) return 'MEDIUM';
-            return 'LARGE';
-        }
-
-        function estimateDistanceMeters(box, frameW, frameH) {
-            if (!box) return '--';
-            const heightRatio = box.height / frameH;
-            const estimate = clamp((1.7 / Math.max(heightRatio, 0.04)), 0.35, 4.5);
-            return `${estimate.toFixed(1)}m`;
-        }
-
-        function estimateBodyStatus(poseLandmarks) {
-            if (!poseLandmarks) return 'NOT DETECTED';
-            const visible = poseLandmarks.filter(p => (p.visibility ?? 0) > 0.45).length;
-            if (visible >= 18) return 'FULL BODY';
-            if (visible >= 10) return 'UPPER BODY';
-            if (visible >= 5) return 'PARTIAL';
-            return 'LOW CONFIDENCE';
-        }
-
-        function sampleLightingLevel() {
-            try {
-                if (!video.videoWidth || !video.videoHeight) return lastLightingSample.value;
-                const now = performance.now();
-                if (now - lastLightingSample.ts < 650) return lastLightingSample.value;
-
-                const w = 48, h = 27;
-                probeCanvas.width = w;
-                probeCanvas.height = h;
-                probeCtx.drawImage(video, 0, 0, w, h);
-                const data = probeCtx.getImageData(0, 0, w, h).data;
-                let sum = 0;
-                for (let i = 0; i < data.length; i += 4) {
-                    sum += 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
-                }
-                const avg = sum / (w * h);
-                lastLightingSample = { value: avg, ts: now };
-                return avg;
-            } catch (e) {
-                return lastLightingSample.value;
-            }
-        }
-
-        function lightingLabel(v) {
-            if (v < 42) return 'VERY LOW';
-            if (v < 72) return 'LOW';
-            if (v < 120) return 'NORMAL';
-            if (v < 180) return 'BRIGHT';
-            return 'HOT';
-        }
-
-        function applyAdaptiveCameraLook() {
-            const light = sampleLightingLevel();
-            const lowLight = light < 72;
-
-            if (scanModeActive) {
-                canvas.style.filter = lowLight
-                    ? 'contrast(1.58) brightness(1.14) saturate(1.12)'
-                    : 'contrast(1.12) brightness(1.03) saturate(1.06)';
-            } else {
-                canvas.style.filter = lowLight
-                    ? 'contrast(1.52) brightness(0.88) saturate(1.05)'
-                    : 'contrast(1.4) brightness(0.75) saturate(1.0)';
-            }
-        }
-
-        function drawScanBox(box, label, color = '#00ffff') {
-            if (!box) return;
-            const el = document.createElement('div');
-            el.className = 'scan-box';
-            el.style.left = `${box.x}px`;
-            el.style.top = `${box.y}px`;
-            el.style.width = `${box.width}px`;
-            el.style.height = `${box.height}px`;
-            el.style.borderColor = color;
-            el.style.boxShadow = `0 0 18px ${color}22`;
-
-            const tag = document.createElement('div');
-            tag.className = 'scan-label';
-            tag.style.borderColor = color + '55';
-            tag.textContent = label;
-
-            el.appendChild(tag);
-            overlayCanvas.parentElement?.appendChild(el);
-            setTimeout(() => el.remove(), 45);
-        }
-
-        function clearTransientScanBoxes() {
-            const boxes = document.querySelectorAll('.scan-box');
-            boxes.forEach((box) => box.remove());
-        }
-
-        function drawPoseSkeletonAndBody(lm, w, h) {
-            if (!lm) return;
-            const conn = [
-                [11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]
-            ];
-            overlayCtx.save();
-            overlayCtx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
-            overlayCtx.lineWidth = 2;
-            overlayCtx.shadowBlur = 14;
-            overlayCtx.shadowColor = '#00ffff';
-
-            for (const [a, b] of conn) {
-                const pa = lm[a], pb = lm[b];
-                if (!pa || !pb) continue;
-                if ((pa.visibility ?? 0) < 0.35 || (pb.visibility ?? 0) < 0.35) continue;
-                overlayCtx.beginPath();
-                overlayCtx.moveTo(pa.x * w, pa.y * h);
-                overlayCtx.lineTo(pb.x * w, pb.y * h);
-                overlayCtx.stroke();
-            }
-
-            const box = boundsFromLandmarks(lm, w, h, 0.35);
-            if (box) {
-                overlayCtx.strokeStyle = 'rgba(0,255,255,0.9)';
-                overlayCtx.lineWidth = 1.8;
-                overlayCtx.shadowBlur = 16;
-                overlayCtx.shadowColor = '#00ffff';
-                overlayCtx.strokeRect(box.x, box.y, box.width, box.height);
-
-                overlayCtx.fillStyle = 'rgba(0,0,0,0.7)';
-                overlayCtx.fillRect(box.x, Math.max(0, box.y - 22), 116, 18);
-                overlayCtx.fillStyle = '#ffffff';
-                overlayCtx.font = '10px Courier New, monospace';
-                overlayCtx.fillText('BODY LOCK', box.x + 6, Math.max(11, box.y - 9));
-            }
-            overlayCtx.restore();
-            return box;
-        }
-
-        function drawHandOverlay(hand, handednessLabel, index, frameW, frameH) {
-            const box = boundsFromLandmarks(hand, frameW, frameH, 0.15);
-            if (!box) return null;
-            const gesture = labelFromHand(hand, handednessLabel);
-            const color = gesture === 'FIST' ? '#f97316'
-                : gesture === 'THUMBS UP' ? '#22c55e'
-                : gesture === 'POINTING' ? '#a855f7'
-                : '#00ffff';
-
-            overlayCtx.save();
-            overlayCtx.strokeStyle = color;
-            overlayCtx.lineWidth = 2;
-            overlayCtx.shadowBlur = 16;
-            overlayCtx.shadowColor = color;
-            overlayCtx.strokeRect(box.x, box.y, box.width, box.height);
-
-            overlayCtx.fillStyle = 'rgba(0,0,0,0.75)';
-            overlayCtx.fillRect(box.x, Math.max(0, box.y - 22), Math.min(180, box.width + 40), 18);
-            overlayCtx.fillStyle = '#ffffff';
-            overlayCtx.font = '10px Courier New, monospace';
-            overlayCtx.fillText(`${handednessLabel || 'HAND'} • ${gesture}`, box.x + 6, Math.max(11, box.y - 9));
-            overlayCtx.restore();
-
-            return { box, gesture, color };
-        }
-
-        async function analyzeTrackSnapshot() {
-            if (!scanModeActive || scanAnalysisInFlight) return;
-            scanAnalysisInFlight = true;
-            try {
-                const imageBase64 = getVideoFrameBase64();
-                if (!imageBase64) return;
-
-                const prompt = `
-You are F.R.I.D.A.Y. running a live track scan in a futuristic HUD.
-
-Return ONLY valid JSON with these keys:
-{
-  "object": "short noun phrase",
-  "size": "SMALL | MEDIUM | LARGE",
-  "gesture": "OPEN HAND | FIST | POINTING | THUMBS UP | UNKNOWN",
-  "body": "FULL BODY | UPPER BODY | PARTIAL | NOT DETECTED",
-  "distance": "short estimate in meters like 1.4m",
-  "confidence": 0-100,
-  "notes": "one short sentence"
-}
-
-Rules:
-- Focus on the most prominent visible subject in the frame.
-- If the visible subject is a person, describe body and gesture.
-- If the visible subject is an object, describe the object and its approximate size.
-- Be honest when unclear.
-- Do not add markdown, code fences, or extra commentary.
-
-Frame request: ${scanModeActive ? 'TRACK SCAN' : 'NORMAL'}
-`;
-                const res = await fetch(GEMINI_ENDPOINT, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-goog-api-key': GEMINI_API_KEY
-                    },
-                    body: JSON.stringify({
-                        contents: [{
-                            parts: [
-                                { text: prompt },
-                                {
-                                    inline_data: {
-                                        mime_type: 'image/jpeg',
-                                        data: imageBase64
-                                    }
-                                }
-                            ]
-                        }],
-                        generationConfig: {
-                            temperature: 0.1,
-                            topP: 0.9,
-                            maxOutputTokens: 220,
-                            thinkingConfig: { thinkingLevel: "low" }
-                        }
-                    })
-                });
-
-                const data = await res.json();
-                const raw = data?.candidates?.[0]?.content?.parts?.map(p => p.text || '').join(' ').trim();
-                if (!raw) return;
-
-                const cleaned = raw
-                    .replace(/```json|```/g, '')
-                    .trim();
-
-                const match = cleaned.match(/\{[\s\S]*\}/);
-                const jsonText = match ? match[0] : cleaned;
-                let parsed = null;
-                try { parsed = JSON.parse(jsonText); } catch (e) { parsed = null; }
-
-                if (parsed) {
-                    updateScanTelemetry({
-                        object: parsed.object || 'UNKNOWN',
-                        size: parsed.size || '--',
-                        gesture: parsed.gesture || '--',
-                        body: parsed.body || '--',
-                        distance: parsed.distance || '--',
-                        light: lightingLabel(lastLightingSample.value)
-                    });
-                    if (typeof parsed.confidence !== 'undefined') {
-                        document.getElementById('sync-status').innerText = `// TRACK SCAN ACTIVE // CONFIDENCE ${parsed.confidence}%`;
-                    }
-                    if (parsed.notes) addLog(`SCAN: ${parsed.notes}`);
-                }
-            } catch (e) {
-                // silent fallback; local overlay keeps running
-            } finally {
-                scanAnalysisInFlight = false;
-            }
-        }
-
-        function startTrackAnalysisLoop() {
-            if (scanAnalysisTimer) return;
-            scanAnalysisTimer = setInterval(() => {
-                if (scanModeActive) analyzeTrackSnapshot();
-            }, 2800);
-        }
-
-        function stopTrackAnalysisLoop() {
-            if (scanAnalysisTimer) {
-                clearInterval(scanAnalysisTimer);
-                scanAnalysisTimer = null;
-            }
-            scanAnalysisInFlight = false;
-        }
-
-
-        function onResults(results) {
-            latestPoseLandmarks = results.poseLandmarks || null;
-            ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-
-            const scanOverlayAlpha = scanModeActive ? 0.08 : 0.24;
-            ctx.fillStyle = `rgba(1, 6, 12, ${scanOverlayAlpha})`;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-            clearTransientScanBoxes();
-            applyAdaptiveCameraLook();
-
-            const w = overlayCanvas.width, h = overlayCanvas.height;
-
-            if (scanModeActive) {
-                document.getElementById('sync-status').innerText = "// TRACK SCAN ACTIVE // LIVE CAMERA MODE";
-
-                const light = sampleLightingLevel();
-                updateScanTelemetry({
-                    object: document.getElementById('scan-object')?.innerText || 'ANALYZING',
-                    size: document.getElementById('scan-size')?.innerText || '--',
-                    gesture: document.getElementById('scan-gesture')?.innerText || '--',
-                    body: latestPoseLandmarks ? estimateBodyStatus(latestPoseLandmarks) : 'NOT DETECTED',
-                    distance: latestPoseLandmarks ? estimateDistanceMeters(boundsFromLandmarks(latestPoseLandmarks, w, h, 0.35), w, h) : '--',
-                    light: lightingLabel(light)
-                });
-
-                overlayCtx.save();
-                overlayCtx.strokeStyle = 'rgba(0,255,255,0.25)';
-                overlayCtx.lineWidth = 1.2;
-                overlayCtx.setLineDash([10, 12]);
-                overlayCtx.beginPath();
-                overlayCtx.moveTo(w * 0.08, h * 0.5);
-                overlayCtx.lineTo(w * 0.92, h * 0.5);
-                overlayCtx.stroke();
-                overlayCtx.setLineDash([]);
-
-                overlayCtx.beginPath();
-                overlayCtx.strokeStyle = 'rgba(0,255,255,0.55)';
-                overlayCtx.arc(w * 0.5, h * 0.5, Math.min(w, h) * 0.18, 0, Math.PI * 2);
-                overlayCtx.stroke();
-                overlayCtx.restore();
-
-                if (latestPoseLandmarks) {
-                    const bodyBox = drawPoseSkeletonAndBody(latestPoseLandmarks, w, h);
-                    if (bodyBox) {
-                        const sizeClass = estimateSizeClass(bodyBox, w, h);
-                        const distClass = estimateDistanceMeters(bodyBox, w, h);
-                        updateScanTelemetry({
-                            object: 'BODY / PERSON',
-                            size: sizeClass,
-                            body: estimateBodyStatus(latestPoseLandmarks),
-                            distance: distClass,
-                            light: lightingLabel(light)
-                        });
-                    }
-                }
-
-                if (latestHandsLandmarks && latestHandsLandmarks.length) {
-                    latestHandsLandmarks.forEach((hand, idx) => {
-                        const handednessLabel = latestHandedness?.[idx]?.label || `HAND ${idx + 1}`;
-                        const result = drawHandOverlay(hand, handednessLabel, idx, w, h);
-                        if (result) {
-                            updateScanTelemetry({
-                                gesture: result.gesture,
-                                size: estimateSizeClass(result.box, w, h),
-                                light: lightingLabel(light)
-                            });
-                        }
-                    });
-                }
-
-                renderVisualEffects();
-                return;
-            }
-
-            if (results.poseLandmarks) {
-                const lm = results.poseLandmarks;
-                if (!isSuitedUp && !isDetecting) {
-                    isDetecting = true;
-                    document.getElementById('sync-status').innerText = "// RETINAL SECURITY CONFIRMED. INITIALIZING CORE...";
-                    setTimeout(triggerSuitUp, 1200);
-                }
-
-                if (isSuitedUp) {
-                    const lShoulder = lm[11], rShoulder = lm[12];
-                    const lElbow = lm[13], rElbow = lm[14];
-                    const lWrist = lm[15], rWrist = lm[16];
-
-                    const chestX = ((lShoulder.x + rShoulder.x) / 2) * w;
-                    const chestY = ((lShoulder.y + rShoulder.y) / 2) * h + 30;
-                    const scale = Math.max(0.4, Math.abs(lShoulder.x - rShoulder.x) * 2);
-
-                    drawArmorPlates(overlayCtx, lm, w, h, scale);
-                    drawArcReactor(chestX, chestY, 26 * scale);
-
-                    const wristDist = Math.hypot(lWrist.x - rWrist.x, lWrist.y - rWrist.y);
-                    const shieldActive = (wristDist < 0.08 && lWrist.y > lShoulder.y);
-                    const isUnibeamPose = (wristDist < 0.1 && Math.abs(lWrist.y - chestY / h) < 0.15 && Math.abs(rWrist.y - chestY / h) < 0.15);
-
-                    if (isUnibeamPose) {
-                        drawUnibeam(chestX, chestY, h);
-                        document.body.classList.add('heavy-shake');
-                        drainPower(1.0);
-                        if (!unibeamCharging) {
-                            fridaySpeak("Unibeam discharging. Clear the path!", true);
-                            playFX('unibeam');
-                            spawnParticles(chestX, chestY, 18, ['#ffffff', '#00ffff']);
-                            spawnRipple(chestX, chestY, '#ffffff');
-                        }
-                        unibeamCharging = true;
-                    } else {
-                        unibeamCharging = false;
-                        document.body.classList.remove('heavy-shake');
-
-                        if (shieldActive) {
-                            drawShield(chestX, chestY, 240 * scale);
-                            if (!lastShieldState) {
-                                fridaySpeak("Hardlight shielding protocol active.", true);
-                                addLog("Shield optimized.");
-                            }
-                            drainPower(0.25);
-                        }
-                    }
-                    lastShieldState = shieldActive;
-
-                    const lFire = lWrist.y < lElbow.y - 0.05;
-                    const rFire = rWrist.y < rElbow.y - 0.05;
-                    const isFlyingPose = Math.abs(lWrist.y - lShoulder.y) < 0.1 && Math.abs(rWrist.y - rShoulder.y) < 0.1 && !lFire && !rFire && !isUnibeamPose;
-
-                    const flightPanel = document.getElementById('flight-panel');
-
-                    if (isFlyingPose) {
-                        flightPanel.classList.remove('hidden');
-                        drainPower(0.15);
-                        if (lWrist.visibility > 0.5) drawThruster(lWrist.x * w, lWrist.y * h, 18 * scale, true);
-                        if (rWrist.visibility > 0.5) drawThruster(rWrist.x * w, rWrist.y * h, 18 * scale, true);
-
-                        if (!lastFlightState) {
-                            fridaySpeak("Vector boosters are active. Stabilizing altitude.", true);
-                            spawnParticles(lWrist.x * w, lWrist.y * h, 8, ['#00ffff', '#ffffff']);
-                            spawnParticles(rWrist.x * w, rWrist.y * h, 8, ['#00ffff', '#ffffff']);
-                        }
-                    } else {
-                        flightPanel.classList.add('hidden');
-
-                        if (lWrist.visibility > 0.5 && !isUnibeamPose) drawThruster(lWrist.x * w, lWrist.y * h, 18 * scale, false);
-                        if (rWrist.visibility > 0.5 && !isUnibeamPose) drawThruster(rWrist.x * w, rWrist.y * h, 18 * scale, false);
-                    }
-                    lastFlightState = isFlyingPose;
-
-                    if ((lFire || rFire) && !isUnibeamPose && !isFlyingPose) {
-                        document.body.classList.add('shake');
-                        drainPower(0.35);
-                        if (!lastRepulsorState) {
-                            fridaySpeak("Repulsor matrix is discharging.", true);
-                        }
-                        if (Math.random() > 0.72) playFX('repulsor');
-
-                        const rx = (lFire ? lWrist.x : rWrist.x) * w;
-                        const ry = (lFire ? lWrist.y : rWrist.y) * h;
-                        spawnParticles(rx, ry, 8, ['#ffffff', '#00ffff']);
-                        spawnRipple(rx, ry, '#ffffff');
-
-                        if (lFire) {
-                            overlayCtx.beginPath();
-                            overlayCtx.arc(lWrist.x * w, lWrist.y * h, 25 * scale, 0, Math.PI * 2);
-                            overlayCtx.fillStyle = '#fff';
-                            overlayCtx.shadowBlur = 20;
-                            overlayCtx.shadowColor = '#ffffff';
-                            overlayCtx.fill();
-                        }
-                        if (rFire) {
-                            overlayCtx.beginPath();
-                            overlayCtx.arc(rWrist.x * w, rWrist.y * h, 25 * scale, 0, Math.PI * 2);
-                            overlayCtx.fillStyle = '#fff';
-                            overlayCtx.shadowBlur = 20;
-                            overlayCtx.shadowColor = '#ffffff';
-                            overlayCtx.fill();
-                        }
-                    } else if (!isUnibeamPose) {
-                        document.body.classList.remove('shake');
-                    }
-                    lastRepulsorState = (lFire || rFire);
-
-                    const leftForearmAim = Math.hypot(lWrist.x - lElbow.x, lWrist.y - lElbow.y) < 0.18 || lWrist.y < lElbow.y + 0.06;
-                    const rightForearmAim = Math.hypot(rWrist.x - rElbow.x, rWrist.y - rElbow.y) < 0.18 || rWrist.y < rElbow.y + 0.06;
-                    const leftLaunchReady = lWrist.visibility > 0.5 && lElbow.visibility > 0.5 && leftForearmAim && lWrist.x < lElbow.x + 0.22;
-                    const rightLaunchReady = rWrist.visibility > 0.5 && rElbow.visibility > 0.5 && rightForearmAim && rWrist.x > rElbow.x - 0.22;
-
-                    if ((leftLaunchReady || rightLaunchReady) && missiles > 0 && Math.random() > 0.92) {
-                        const side = leftLaunchReady ? 'left' : 'right';
-                        const origin = side === 'left'
-                            ? {
-                                x: ((lElbow.x * 0.45 + lWrist.x * 0.55)) * w - 10,
-                                y: ((lElbow.y * 0.35 + lWrist.y * 0.65)) * h
-                              }
-                            : {
-                                x: ((rElbow.x * 0.45 + rWrist.x * 0.55)) * w + 10,
-                                y: ((rElbow.y * 0.35 + rWrist.y * 0.65)) * h
-                              };
-
-                        launchMissile(side, origin);
-                        missiles--;
-                        syncMissileUI();
-                        triggerFxLabel('MISSILE FIRED', '#00ffff');
-                        spawnParticles(origin.x, origin.y, 12, ['#ffffff', '#00ffff', '#60a5fa']);
-                        spawnRipple(origin.x, origin.y, '#00ffff');
-
-                        if (missiles === 0) {
-                            setWeaponStatus("ORDNANCE DEPLETED", true);
-                            fridaySpeak("Warning! Micro missile inventory is depleted.", true);
-                        }
-                    }
-                }
-            } else if (isSuitedUp) {
-                isSuitedUp = false;
-                isDetecting = false;
-                document.getElementById('status-container').style.opacity = '1';
-                document.getElementById('sync-status').innerText = "// SYSTEM DISCONNECTED // AWAITING NEURAL SYNAPSE";
-                document.getElementById('center-reticle').style.display = 'none';
-                document.getElementById('main-hud').classList.remove('hud-visible');
-                document.body.classList.remove('shake', 'heavy-shake');
-                setScanLocked(false);
-                if (recognition) recognition.stop();
-                fridaySpeak("Target lost. I am putting the suit on standby network.", true);
-            }
-
-            for (let i = activeMissiles.length - 1; i >= 0; i--) {
-                const m = activeMissiles[i];
-                m.trail = m.trail || [];
-                m.trail.push({ x: m.x, y: m.y });
-                if (m.trail.length > 14) m.trail.shift();
-
-                m.x += m.vx;
-                m.y += m.vy;
-                m.vx *= 1.004;
-                m.vy -= 0.03;
-                m.life -= 1;
-
-                drawMissile(m);
-
-                if (m.y < -40 || m.x < -60 || m.x > overlayCanvas.width + 60 || m.life <= 0) {
-                    spawnRipple(m.x, m.y, '#00ffff');
-                    spawnParticles(m.x, m.y, 10, ['#00ffff', '#ffffff', '#f59e0b']);
-                    activeMissiles.splice(i, 1);
-                }
-            }
-
-            renderVisualEffects();
-        }
-
-        function drainPower(amount) {
-            powerCore = Math.max(0, powerCore - amount);
-            document.getElementById('power-val').innerText = Math.floor(powerCore);
-            if (powerCore <= 15 && powerCore > 14.6) {
-                fridaySpeak("Warning, Boss! Arc reactor power is critically low. Charge the core.", true);
-            }
-        }
-
-        const pose = new Pose({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}` });
-        pose.setOptions({
-            modelComplexity: 2,
-            smoothLandmarks: true,
-            enableSegmentation: false,
-            smoothSegmentation: false,
-            minDetectionConfidence: 0.48,
-            minTrackingConfidence: 0.46
-        });
-        pose.onResults(onResults);
-
-        const hands = new Hands({ locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}` });
-        hands.setOptions({
-            maxNumHands: 2,
-            modelComplexity: 1,
-            minDetectionConfidence: 0.5,
-            minTrackingConfidence: 0.45
-        });
-        hands.onResults((results) => {
-            latestHandsLandmarks = results.multiHandLandmarks || [];
-            latestHandedness = results.multiHandedness || [];
-        });
-
-        const camera = new Camera(video, {
-            onFrame: async () => {
-                await pose.send({ image: video });
-                if (isSuitedUp || scanModeActive) {
-                    await hands.send({ image: video });
-                }
-            },
-            width: 1280,
-            height: 720
-        });
-        camera.start();
-
-        setInterval(() => {
-            if (video.readyState >= 2) sampleLightingLevel();
-        }, 900);
-
-        initVoiceRecognition();
-
-        const trackScanBtn = document.getElementById('track-scan-btn');
-        if (trackScanBtn) {
-            trackScanBtn.addEventListener('click', () => {
-                if (!isSuitedUp) {
-                    fridaySpeak("Suit is not active yet. Lock the neural link first.", true);
-                    return;
-                }
-                runTrackScan();
-            });
-        }
-
-        document.addEventListener('pointerdown', () => {
-            if (armedOnce) return;
-            armedOnce = true;
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            startRecognitionSafe(120);
-        });
-
-        setInterval(() => {
-            if (isSuitedUp && !lastRepulsorState && !lastShieldState && !unibeamCharging && !lastFlightState) {
-                if (powerCore < 100) {
-                    powerCore = Math.min(100, powerCore + 0.45);
-                    document.getElementById('power-val').innerText = Math.floor(powerCore);
-                }
-            }
-        }, 1200);
-
-        setInterval(() => {
-            if (isSuitedUp && !isFridaySpeaking && Math.random() > 0.65) {
-                const recommendations = [
-                    "Boss, try the vector boosters. Keep both arms steady.",
-                    "Sir, the health scan is available. Say \"run health scan\".",
-                    "Ordnance stack is stable, Boss. Cross your hands to fire the Unibeam.",
-                    "Stealth mode is on standby, Sir. What should I activate?",
-                    "I can analyze any object you show me. Say \"analyze this\"."
-                ];
-                const rec = recommendations[Math.floor(Math.random() * recommendations.length)];
-                fridaySpeak(rec);
-            }
-        }, 18000);
-    </script>
+<video class=input_video autoplay playsinline></video>
+<canvas class=output_canvas id=main-canvas></canvas>
+<canvas class=overlay_canvas></canvas>
+<div class=vignette></div>
+<div class=grid-bg></div>
+<div id=flash class=flash-overlay></div>
+<div id=scan-line class=scan-line></div>
+<div id=scan-wash class=scan-wash></div>
+<div id=scan-corners class=scan-corners></div>
+<div id=fx-layer class="fixed inset-0 pointer-events-none z-[55]"></div>
+<div id=scan-telemetry class=scan-telemetry>
+<div class=scan-telemetry-panel>
+<div class="grid grid-cols-2 md:grid-cols-6 gap-2">
+<div class=scan-kpi>
+<div class=scan-kpi-label>OBJECT</div>
+<div id=scan-object class=scan-kpi-value>WAITING</div>
+</div>
+<div class=scan-kpi>
+<div class=scan-kpi-label>SIZE</div>
+<div id=scan-size class=scan-kpi-value>--</div>
+</div>
+<div class=scan-kpi>
+<div class=scan-kpi-label>GESTURE</div>
+<div id=scan-gesture class=scan-kpi-value>--</div>
+</div>
+<div class=scan-kpi>
+<div class=scan-kpi-label>BODY</div>
+<div id=scan-body class=scan-kpi-value>--</div>
+</div>
+<div class=scan-kpi>
+<div class=scan-kpi-label>DISTANCE</div>
+<div id=scan-distance class=scan-kpi-value>--</div>
+</div>
+<div class=scan-kpi>
+<div class=scan-kpi-label>LIGHT</div>
+<div id=scan-light class=scan-kpi-value>--</div>
+</div>
+</div>
+</div>
+</div>
+<div id=center-reticle class=reticle>
+<div class="reticle-inner theme-border"></div>
+<div class="absolute inset-[45%] bg-cyan-400/30 rounded-full animate-ping"></div>
+</div>
+<div id=status-container class=sys-msg>
+<div class="text-3xl font-black tracking-[0.7em] text-white drop-shadow-[0_0_12px_#00ffff]">MARK 85 NEXUS</div>
+<div id=sync-status class="text-xs mt-4 text-cyan-400 tracking-widest uppercase animate-pulse">// SYSTEM ONLINE // AWAITING NEURAL LINK</div>
+</div>
+<div id=main-hud class=hud-ui>
+<div class="flex justify-between items-start w-full">
+<div id=brand-panel class="border-l-4 border-cyan-400 pl-4 bg-black/60 backdrop-blur-md py-4 pr-12 rounded-r-md border-b border-cyan-900/30">
+<div class="text-[10px] text-cyan-500 tracking-[0.3em] font-bold">VERMA GROUP // ADVANCED DEFENSE</div>
+<div class="text-3xl font-black text-white tracking-wider mt-1">CORE_PWR: <span id=power-val>100</span>%</div>
+<div class="text-[10px] text-emerald-400 tracking-widest mt-1.5 font-mono flex items-center gap-2">
+<span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+SYNC STATE: ACTIVE & OPTIMIZED
+</div>
+</div>
+<div class="friday-box p-4 rounded-lg flex flex-col gap-2.5 max-w-sm pointer-events-auto relative w-80">
+<div class="flex items-start gap-3">
+<div class="relative mt-1">
+<div id=friday-ping class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-ping absolute"></div>
+<div id=friday-dot class="w-2.5 h-2.5 rounded-full bg-cyan-500 transition-colors duration-300"></div>
+</div>
+<div class=flex-1>
+<div class="text-[11px] text-cyan-400 font-black tracking-widest uppercase flex justify-between">
+<span>F.R.I.D.A.Y. v6.0</span>
+<span class="text-[9px] text-cyan-600 font-mono" id=voice-indicator>STDBY</span>
+</div>
+<div id=friday-speech-text class="text-xs text-white/90 mt-1.5 italic font-sans leading-relaxed transition-all duration-300">
+"Initializing neural patterns..."
+</div>
+</div>
+</div>
+<div class="border-t border-cyan-900/50 pt-2.5 mt-0.5">
+<div id=user-speech-text class="text-[10px] text-cyan-500 font-mono tracking-wider truncate uppercase">
+> Systems initialized. Awaiting feedback... Use the TRACK SCAN button to scan or stop scanning.
+</div>
+</div>
+</div>
+</div>
+<div class="flex items-center justify-between w-full h-auto my-auto">
+<div class="text-[9px] text-cyan-500/70 font-mono bg-black/40 p-3 border border-cyan-900/20 rounded terminal-scroll w-56 flex flex-col gap-1" id=log-feed>
+<div>[SYS_LOG] Core link established.</div>
+<div>[SYS_LOG] Nanotech topology mapping...</div>
+</div>
+<div id=flight-panel class="hidden text-right font-mono bg-black/50 p-3 border border-orange-500/50 rounded-lg shadow-[0_0_15px_rgba(255,165,0,0.2)]">
+<div class="text-[10px] tracking-widest text-orange-400 font-bold mb-1 animate-pulse">VECTOR BOOSTERS: ENGAGED</div>
+<div class="text-[9px] text-cyan-400">ALTITUDE: <span class=text-white>AUTO_NAV</span></div>
+<div class="text-[9px] text-cyan-400">THRUST VECTORS: <span class=text-white>STABILIZED</span></div>
+</div>
+</div>
+<div class="flex justify-between items-end w-full">
+<div class="flex flex-col gap-3">
+<div class="text-[11px] text-cyan-400 bg-black/75 p-4 border border-cyan-900/40 leading-relaxed tracking-wide rounded-lg backdrop-blur-md max-w-sm">
+<span class="text-white font-black tracking-wider">// NEW COMMANDS</span><br>
+<div class="mt-2 text-cyan-500 font-mono text-[10px]">
+<span class=text-white>> "Run health scan" / "Check biometrics"</span><br>
+<span class=text-white>> "Unibeam" / "Blast them"</span><br>
+<span class=text-white>> "How are you Friday" / "Status report" / "Reload missiles" / "Track Scan" / "Analyze this"</span>
+</div>
+</div>
+<button id=track-scan-btn class="pointer-events-auto self-start px-5 py-3 rounded-xl border border-cyan-400 bg-cyan-500/10 text-cyan-200 text-xs font-black tracking-[0.35em] uppercase shadow-[0_0_20px_rgba(0,255,255,0.15)] hover:bg-cyan-400/20 hover:shadow-[0_0_30px_rgba(0,255,255,0.3)] transition-all duration-200 active:scale-[0.98]">
+Track Scan
+</button>
+</div>
+<div id=weapon-panel class="text-right border-r-4 border-cyan-400 pr-4 bg-black/60 backdrop-blur-md py-4 pl-12 rounded-l-md border-b border-cyan-900/30">
+<div class="text-[10px] text-cyan-500 tracking-widest mb-1 font-bold uppercase">Micro-Missile Allocation</div>
+<div id=missile-count class="text-5xl font-black text-white drop-shadow-[0_0_12px_#00ffff]">24</div>
+<div id=weapon-status class="text-[9px] text-cyan-400 tracking-widest mt-1.5 uppercase font-mono">ORDNANCE STACK ONLINE</div>
+</div>
+</div>
+</div>
+<script>const video=document.querySelector('.input_video');const canvas=document.getElementById('main-canvas');const ctx=canvas.getContext('2d',{alpha:false});const overlayCanvas=document.querySelector('.overlay_canvas');const overlayCtx=overlayCanvas.getContext('2d');const MAX_MISSILES=24;const GEMINI_API_KEY="AIzaSyBOwrEPdqKVBFjvsTYbP5E8pqNPFaPWPig";const GEMINI_MODEL="gemini-3.1-flash-lite";const GEMINI_ENDPOINT=`https:let isSuitedUp=false;let isDetecting=false;let missiles=MAX_MISSILES;let activeMissiles=[];let particles=[];let ripples=[];let lastShieldState=false;let lastRepulsorState=false;let lastFlightState=false;let unibeamCharging=false;let powerCore=100;let isThermal=false;let hudColor='#00ffff';let recognition;let isFridaySpeaking=false;let speechQueue=[];let voicesReady=false;let preferredFemaleVoice=null;let visionBusy=false;let armedOnce=false;let scanModeActive=false;function addLog(msg){const feed=document.getElementById('log-feed');const log=document.createElement('div');log.innerText=`[${new Date().toLocaleTimeString().split(' ')[0]}]${msg}`;feed.appendChild(log);if(feed.children.length>7)feed.removeChild(feed.children[0]);}
+function sanitizeEnglishResponse(text){if(!text)return"";return String(text).replace(/\s+/g," ").replace(/^[\"'`]+|[\"'`]+$/g,"").trim();}
+function normalizeCommand(raw){return String(raw||"").toLowerCase().replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();}
+function containsAny(text,phrases){return phrases.some(p=>text.includes(p));}
+function syncMissileUI(){document.getElementById('missile-count').innerText=missiles;}
+function setWeaponStatus(text,danger=false){const el=document.getElementById('weapon-status');el.innerText=text;el.className=danger?"text-[9px] text-rose-500 tracking-widest mt-1.5 uppercase font-mono animate-pulse":"text-[9px] text-cyan-400 tracking-widest mt-1.5 uppercase font-mono";}
+function spawnParticles(x,y,count=12,palette=['#00ffff','#ffffff']){for(let i=0;i<count;i++){if(particles.length>240)particles.shift();const angle=Math.random()*Math.PI*2;const speed=0.5+Math.random()*2.8;particles.push({x,y,vx:Math.cos(angle)*speed,vy:Math.sin(angle)*speed,life:28+Math.random()*22,maxLife:28+Math.random()*22,size:1.2+Math.random()*2.6,color:palette[Math.floor(Math.random()*palette.length)]});}}
+function spawnRipple(x,y,color='#00ffff'){ripples.push({x,y,radius:0,maxRadius:180,alpha:0.82,color});if(ripples.length>18)ripples.shift();}
+function isScanLocked(){return scanModeActive;}
+function setScanLocked(locked){scanModeActive=locked;document.body.classList.toggle('scan-active-state',locked);showScanTelemetry(locked);if(locked)startTrackAnalysisLoop();else stopTrackAnalysisLoop();const button=document.getElementById('track-scan-btn');if(button){button.disabled=false;button.textContent=locked?'STOP SCAN':'TRACK SCAN';button.style.opacity='1';button.style.cursor='pointer';button.classList.toggle('ring-2',locked);button.classList.toggle('ring-cyan-300/50',locked);}
+if(locked){document.getElementById('sync-status').innerText="// TRACK SCAN ACTIVE // LIVE CAMERA MODE";updateScanTelemetry({object:'ANALYZING',size:'--',gesture:'--',body:'SEARCHING',distance:'--',light:lightingLabel(sampleLightingLevel())});const feed=document.getElementById('log-feed');if(feed){const hint=document.createElement('div');hint.innerText=`[${new Date().toLocaleTimeString().split(' ')[0]}]Track scan engaged.Combat systems locked.`;feed.appendChild(hint);if(feed.children.length>7)feed.removeChild(feed.children[0]);}}else{document.getElementById('sync-status').innerText=isSuitedUp?"// NEURAL LINK ESTABLISHED // READY FOR COMMANDS":"// SYSTEM ONLINE // AWAITING NEURAL LINK";document.getElementById('scan-line').classList.remove('scan-active');document.getElementById('scan-object').innerText='WAITING';document.getElementById('scan-size').innerText='--';document.getElementById('scan-gesture').innerText='--';document.getElementById('scan-body').innerText='--';document.getElementById('scan-distance').innerText='--';document.getElementById('scan-light').innerText='--';}}
+function playScanSweep(){const line=document.getElementById('scan-line');line.classList.add('scan-active');setTimeout(()=>line.classList.remove('scan-active'),2600);const rect=overlayCanvas.getBoundingClientRect();const x=rect.left+rect.width/2;const y=rect.top+rect.height/2;spawnParticles(x,y,20,['#ffffff','#00ffff','#7dd3fc']);spawnRipple(x,y,'#00ffff');triggerFxLabel('TRACK SCAN','#00ffff');flashCenterPulse('#00ffff');}
+async function runTrackScan(){if(visionBusy)return;if(scanModeActive){setScanLocked(false);triggerFxLabel('SCAN OFF','#00ffff');fridaySpeak("Track scan disabled.",true);return;}
+setScanLocked(true);playScanSweep();try{fridaySpeak("Track scan engaged. Live camera view is active. I am tracking body shape, gestures, size, and objects.",true);analyzeTrackSnapshot();}catch(error){console.error(error);fridaySpeak("The scan was interrupted.",true);}}
+function triggerFxLabel(text,color='#00ffff'){const layer=document.getElementById('fx-layer');if(!layer)return;const tag=document.createElement('div');tag.className='absolute px-3 py-1 rounded-full text-[10px] font-black tracking-[0.35em] uppercase border backdrop-blur-md';tag.style.left='50%';tag.style.top='14%';tag.style.transform='translate(-50%, 0)';tag.style.color=color;tag.style.borderColor=color;tag.style.background='rgba(0,0,0,0.45)';tag.style.boxShadow=`0 0 20px ${color}55`;tag.textContent=text;layer.appendChild(tag);setTimeout(()=>{tag.style.transition='opacity 220ms ease, transform 220ms ease';tag.style.opacity='0';tag.style.transform='translate(-50%, -10px)';setTimeout(()=>tag.remove(),240);},650);}
+function flashCenterPulse(color='#00ffff'){const layer=document.getElementById('fx-layer');if(!layer)return;const pulse=document.createElement('div');pulse.className='absolute left-1/2 top-1/2 rounded-full border';pulse.style.width='16px';pulse.style.height='16px';pulse.style.transform='translate(-50%, -50%) scale(1)';pulse.style.borderColor=color;pulse.style.boxShadow=`0 0 35px ${color}88`;pulse.style.opacity='0.95';layer.appendChild(pulse);const start=performance.now();const tick=(now)=>{const t=Math.min(1,(now-start)/450);const scale=1+t*10.5;pulse.style.transform=`translate(-50%,-50%)scale(${scale})`;pulse.style.opacity=String(0.95*(1-t));if(t<1)requestAnimationFrame(tick);else pulse.remove();};requestAnimationFrame(tick);}
+function renderVisualEffects(){overlayCtx.save();for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vx*=0.986;p.vy*=0.986;p.life-=1;const alpha=Math.max(0,p.life/p.maxLife);overlayCtx.globalAlpha=alpha;overlayCtx.beginPath();overlayCtx.arc(p.x,p.y,p.size,0,Math.PI*2);overlayCtx.fillStyle=p.color;overlayCtx.shadowBlur=18;overlayCtx.shadowColor=p.color;overlayCtx.fill();if(p.life<=0)particles.splice(i,1);}
+for(let i=ripples.length-1;i>=0;i--){const r=ripples[i];r.radius+=5.7;r.alpha*=0.964;overlayCtx.globalAlpha=r.alpha;overlayCtx.beginPath();overlayCtx.arc(r.x,r.y,r.radius,0,Math.PI*2);overlayCtx.lineWidth=2;overlayCtx.strokeStyle=r.color;overlayCtx.shadowBlur=22;overlayCtx.shadowColor=r.color;overlayCtx.stroke();if(r.radius>r.maxRadius||r.alpha<0.03)ripples.splice(i,1);}
+overlayCtx.restore();overlayCtx.globalAlpha=1;}
+function refillMissiles(announce=true){missiles=MAX_MISSILES;syncMissileUI();setWeaponStatus('ORDNANCE STACK ONLINE',false);const rect=document.getElementById('weapon-panel').getBoundingClientRect();const cx=rect.left+rect.width/2;const cy=rect.top+rect.height/2;spawnParticles(cx,cy,34,['#ffffff','#00ffff','#7dd3fc']);spawnRipple(cx,cy,'#00ffff');triggerFxLabel('MISSILES RELOADED','#00ffff');if(announce){fridaySpeak("Missile bay reloaded. Full ordnance capacity restored.",true);}}
+function getVideoFrameBase64(){try{const temp=document.createElement('canvas');const width=video.videoWidth||canvas.width||1280;const height=video.videoHeight||canvas.height||720;temp.width=width;temp.height=height;const tctx=temp.getContext('2d');tctx.drawImage(video,0,0,width,height);return temp.toDataURL('image/jpeg',0.72).split(',')[1];}catch(e){console.error('Frame capture failed:',e);return"";}}
+async function askGeminiEnglish(userText){const prompt=`You are F.R.I.D.A.Y.— an advanced AI assistant.Rules:1)Reply only in English.2)Keep answers clear,direct,accurate,and useful.3)Avoid unnecessary filler,long introductions,and meta-text.4)If the question is ambiguous,ask one short clarifying question.5)Keep responses concise unless more detail is needed.User message:${userText}`;try{const res=await fetch(GEMINI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY},body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:0.2,topP:0.9,maxOutputTokens:220,thinkingConfig:{thinkingLevel:"low"}}})});const data=await res.json();const raw=data?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join(' ').trim();return sanitizeEnglishResponse(raw||"");}catch(error){console.error('Gemini error:',error);return"";}}
+async function analyzeSceneWithGemini(userText){if(visionBusy)return"Vision analysis is already running.";visionBusy=true;document.getElementById('sync-status').innerText="// VISION ARRAY ACTIVE // ANALYZING FRAME...";try{const imageBase64=getVideoFrameBase64();if(!imageBase64){return"I could not capture a clear frame. Move the object closer to the camera and try again.";}
+const prompt=`You are F.R.I.D.A.Y.inside a futuristic HUD.Analyze the image carefully and answer in English only.Rules:-Identify the main visible object first.-If one clear object is present,respond in the exact style:"This is an apple."or"This is a bottle."
+-If the object is unclear,say so clearly and honestly.-If multiple objects are visible,name the most important one first and mention the others briefly.-Keep the answer short,direct,and confident.-Do not mention that you are an AI unless the image is unclear.-Favor the most likely object if lighting is bright but not perfect.User request:${userText}`;const res=await fetch(GEMINI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY},body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:imageBase64}}]}],generationConfig:{temperature:0.1,topP:0.9,maxOutputTokens:260,thinkingConfig:{thinkingLevel:"low"}}})});const data=await res.json();const raw=data?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join(' ').trim();return sanitizeEnglishResponse(raw||"")||"I could not analyze the scene clearly.";}catch(error){console.error('Vision error:',error);return"The vision engine hit an error while analyzing the scene.";}finally{visionBusy=false;document.getElementById('sync-status').innerText=isSuitedUp?"// NEURAL LINK ESTABLISHED // READY FOR COMMANDS":"// SYSTEM ONLINE // AWAITING NEURAL LINK";}}
+function getPreferredFemaleVoice(){const voices=window.speechSynthesis?.getVoices?.()||[];if(!voices.length)return null;const femaleHints=['female','samantha','victoria','aria','karen','zira','google uk english female','google us english','microsoft aria','microsoft zira','siri','susan','ava','emma'];return voices.find(v=>femaleHints.some(h=>v.name.toLowerCase().includes(h)||v.lang.toLowerCase().includes(h)))||voices.find(v=>/en/i.test(v.lang))||voices[0]||null;}
+function refreshVoices(){preferredFemaleVoice=getPreferredFemaleVoice();voicesReady=true;}
+if('speechSynthesis'in window){refreshVoices();window.speechSynthesis.onvoiceschanged=refreshVoices;}
+function updateVoiceIndicator(status,colorClass){const ind=document.getElementById('voice-indicator');const dot=document.getElementById('friday-dot');const ping=document.getElementById('friday-ping');ind.innerText=status;dot.className=`w-2.5 h-2.5 rounded-full ${colorClass}`;ping.className=`w-2.5 h-2.5 rounded-full ${colorClass}animate-ping absolute`;}
+function startRecognitionSafe(delay=120){if(!recognition||!isSuitedUp||isFridaySpeaking)return;setTimeout(()=>{if(!recognition||!isSuitedUp||isFridaySpeaking)return;try{recognition.start();}catch(e){}},delay);}
+function fridaySpeak(text,interrupt=false){const output=String(text||"").trim();if(!output)return;document.getElementById('friday-speech-text').innerText=`"${output}"`;addLog(`FRIDAY:${output}`);if(!('speechSynthesis'in window))return;if(isFridaySpeaking&&!interrupt){speechQueue.push(output);return;}
+isFridaySpeaking=true;updateVoiceIndicator("SPEAKING","bg-amber-400");if(recognition)try{recognition.stop();}catch(e){}
+window.speechSynthesis.cancel();const utterance=new SpeechSynthesisUtterance(output);utterance.rate=1.02;utterance.pitch=1.08;utterance.lang='en-US';if(preferredFemaleVoice)utterance.voice=preferredFemaleVoice;utterance.onend=()=>{isFridaySpeaking=false;updateVoiceIndicator("LISTENING","bg-emerald-400");if(speechQueue.length){const next=speechQueue.shift();fridaySpeak(next,true);return;}
+startRecognitionSafe(90);};utterance.onerror=()=>{isFridaySpeaking=false;updateVoiceIndicator("LISTENING","bg-emerald-400");startRecognitionSafe(140);};window.speechSynthesis.speak(utterance);}
+function initVoiceRecognition(){const SpeechRecognition=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SpeechRecognition)return;recognition=new SpeechRecognition();recognition.continuous=true;recognition.interimResults=true;recognition.maxAlternatives=3;recognition.lang='en-IN';recognition.onstart=()=>{if(!isFridaySpeaking)updateVoiceIndicator("LISTENING","bg-emerald-400");};recognition.onend=()=>{if(isSuitedUp&&!isFridaySpeaking){startRecognitionSafe(80);}else if(!isSuitedUp){updateVoiceIndicator("STDBY","bg-cyan-500");}};recognition.onerror=()=>{if(isSuitedUp&&!isFridaySpeaking){startRecognitionSafe(160);}};recognition.onresult=(event)=>{let finalText='';for(let i=event.resultIndex;i<event.results.length;i++){if(event.results[i].isFinal){finalText+=' '+event.results[i][0].transcript;}}
+const command=normalizeCommand(finalText);if(!command)return;document.getElementById('user-speech-text').innerText=`>"${command.toUpperCase()}"`;if(scanModeActive){return;}
+processBilingualComms(command);};}
+function launchMissile(side='left',startPoint=null){const w=overlayCanvas.width;const h=overlayCanvas.height;const origin=startPoint||(side==='left'?{x:w*0.435,y:h*0.605}:{x:w*0.565,y:h*0.605});const targetSpread=side==='left'?-2.6-Math.random()*1.5:2.6+Math.random()*1.5;activeMissiles.push({x:origin.x,y:origin.y,vx:targetSpread,vy:-5.4-Math.random()*0.9,life:132,trail:[],side});spawnParticles(origin.x,origin.y,22,['#ffffff','#00ffff','#60a5fa']);spawnRipple(origin.x,origin.y,'#00ffff');triggerFxLabel('ARM LAUNCH','#00ffff');playFX('missile');}
+async function processBilingualComms(cmd){const command=normalizeCommand(cmd);if(!command)return;if(isScanLocked()&&!containsAny(command,['track scan','stop scan','scan off','disable scan'])){triggerFxLabel("SCAN LOCKED","#00ffff");fridaySpeak("Scanning is active. Use the button to stop it.",true);return;}
+triggerFxLabel("COMMAND ACCEPTED",hudColor);flashCenterPulse(hudColor);spawnRipple(window.innerWidth/2,window.innerHeight/2,hudColor);spawnParticles(window.innerWidth/2,window.innerHeight/2,10,[hudColor,'#ffffff']);if(containsAny(command,['refill missile','refill missiles','reload missile','reload missiles','rearm missile','rearm missiles','missile refill','replenish missiles','reload ordnance','ordnance reload','missiles full','reset missiles','missile reload','arm missiles'])){refillMissiles(true);return;}
+if(containsAny(command,['track scan','scan object','analyze this','analyze object','analyse object','analyze the object','what do you see','what is this','identify this','identify object','look around','scan surroundings','scan the room','inspect object','describe this','recognize object','object analysis','vision scan'])){if(!scanModeActive){await runTrackScan();}else{fridaySpeak("Track scan is already active. Use the button to stop scanning.",true);}
+return;}
+let reply="";let handledLocally=false;if(containsAny(command,['scan','health','biometric','diagnostic','vitals','full scan'])){document.getElementById('scan-line').classList.add('scan-active');playFX('suit');spawnRipple(window.innerWidth/2,window.innerHeight/2,'#00ffff');setTimeout(()=>document.getElementById('scan-line').classList.remove('scan-active'),2500);reply="Health scan started. Your vitals are stable, and the core temperature is within safe range.";handledLocally=true;}
+else if(containsAny(command,['unibeam','beam','blast','fire beam'])){reply="Unibeam routing is ready. Cross both hands on your chest to fire.";handledLocally=true;}
+else if(containsAny(command,['status report','status','report','suit status','system status'])){reply=`All systems are green,Boss.Matrix core power is at ${Math.floor(powerCore)}percent and missile count is ${missiles}.`;handledLocally=true;}
+else if(containsAny(command,['how are you','how is friday','friday status'])){reply="I am functioning at full capacity, Boss. The advanced suit stack is stable.";handledLocally=true;}
+else if(containsAny(command,['hello','hi friday','friday','listen','wake up','stay awake'])){reply="Online and ready, Sir. I am listening.";handledLocally=true;}
+else if(containsAny(command,['charge','power up','full power','boost power'])){powerCore=100;document.getElementById('power-val').innerText=powerCore;spawnParticles(window.innerWidth/2,window.innerHeight/2,24,['#00ffff','#ffffff']);reply="Nanotech energy array is fully optimized. Power grid is at 100 percent.";handledLocally=true;}
+else if(containsAny(command,['stealth mode','silent mode','ghost mode'])){changeHUDTheme('#a855f7');triggerFxLabel('STEALTH ONLINE','#a855f7');reply="Stealth configuration loaded. Visual signatures minimized.";handledLocally=true;}
+else if(containsAny(command,['combat mode','danger','red alert'])){changeHUDTheme('#ef4444');triggerFxLabel('COMBAT READY','#ef4444');reply="Combat configuration engaged.";handledLocally=true;}
+else if(containsAny(command,['normal mode','cyan mode','restore color','restore system','normal'])){changeHUDTheme('#00ffff');triggerFxLabel('STANDARD MODE','#00ffff');reply="Standard tactical blueprint restored.";handledLocally=true;}
+else if(containsAny(command,['thermal mode','night vision','infrared'])){isThermal=!isThermal;if(isThermal){canvas.classList.add('thermal-mode');triggerFxLabel('THERMAL ON','#f59e0b');reply="Infrared spectral grid activated.";}else{canvas.classList.remove('thermal-mode');triggerFxLabel('THERMAL OFF','#00ffff');reply="Standard optical mode has been restored.";}
+handledLocally=true;}
+else if(containsAny(command,['calibrate suit','diagnostics','system reboot','reboot suit','restart suit'])){changeHUDTheme('#00ffff');document.getElementById('sync-status').innerText="// SYSTEM CALIBRATION COMPLETE // ALL NODES STABLE";spawnParticles(window.innerWidth/2,window.innerHeight/2,18,['#00ffff','#7dd3fc','#ffffff']);reply="Suit recalibration complete. All systems are stable and synchronized.";handledLocally=true;}
+if(!handledLocally){const geminiReply=await askGeminiEnglish(command);const fallbackChoices=["Understood, Boss. I am working on it now.","Information received. I am handling it clearly in English.","Okay, Boss. Your instruction has been processed."];reply=geminiReply||fallbackChoices[Math.floor(Math.random()*fallbackChoices.length)];}
+fridaySpeak(reply);}
+function changeHUDTheme(hex){hudColor=hex;document.documentElement.style.setProperty('--hud-glow',hex);document.getElementById('brand-panel').style.borderColor=hex;document.getElementById('weapon-panel').style.borderColor=hex;document.getElementById('center-reticle').style.borderColor=hex;}
+const audioCtx=new(window.AudioContext||window.webkitAudioContext)();function playFX(type){if(audioCtx.state==='suspended')audioCtx.resume();const osc=audioCtx.createOscillator();const gain=audioCtx.createGain();osc.connect(gain);gain.connect(audioCtx.destination);const now=audioCtx.currentTime;if(type==='suit'){osc.type='sawtooth';osc.frequency.setValueAtTime(55,now);osc.frequency.exponentialRampToValueAtTime(920,now+1.1);gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(0.3,now+0.08);gain.gain.exponentialRampToValueAtTime(0.01,now+1.1);osc.start(now);osc.stop(now+1.1);}else if(type==='repulsor'){osc.type='sine';osc.frequency.setValueAtTime(220,now);osc.frequency.exponentialRampToValueAtTime(1700,now+0.2);gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(0.16,now+0.02);gain.gain.exponentialRampToValueAtTime(0.01,now+0.2);osc.start(now);osc.stop(now+0.2);}else if(type==='missile'){osc.type='triangle';osc.frequency.setValueAtTime(760,now);osc.frequency.exponentialRampToValueAtTime(120,now+0.38);gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(0.18,now+0.03);gain.gain.exponentialRampToValueAtTime(0.01,now+0.38);osc.start(now);osc.stop(now+0.38);}else if(type==='unibeam'){osc.type='square';osc.frequency.setValueAtTime(110,now);osc.frequency.exponentialRampToValueAtTime(860,now+0.5);gain.gain.setValueAtTime(0,now);gain.gain.linearRampToValueAtTime(0.44,now+0.08);gain.gain.exponentialRampToValueAtTime(0.01,now+0.95);osc.start(now);osc.stop(now+0.95);}}
+function resize(){canvas.width=window.innerWidth;canvas.height=window.innerHeight;overlayCanvas.width=window.innerWidth;overlayCanvas.height=window.innerHeight;}
+window.addEventListener('resize',resize);resize();function triggerSuitUp(){isSuitedUp=true;document.getElementById('status-container').style.opacity='0';document.getElementById('center-reticle').style.display='block';document.getElementById('flash').classList.add('flash-active');document.body.classList.add('hud-ready');playFX('suit');addLog("Neural connection locked.");triggerFxLabel("HUD LINKED",'#00ffff');spawnParticles(window.innerWidth/2,window.innerHeight/2,20,['#00ffff','#ffffff']);setTimeout(()=>{document.getElementById('main-hud').classList.add('hud-visible');fridaySpeak("Welcome back, Boss. Mark Eighty-Five systems are calibrated. I am ready for your command.",true);triggerFxLabel("VISION ONLINE","#00ffff");startRecognitionSafe(120);},600);}
+function drawArmorPlates(ctx,lm,w,h,scale){ctx.save();ctx.strokeStyle=hudColor+'b3';ctx.lineWidth=2;ctx.fillStyle='rgba(0, 15, 25, 0.25)';const shL={x:lm[11].x*w,y:lm[11].y*h};const shR={x:lm[12].x*w,y:lm[12].y*h};const chestX=(shL.x+shR.x)/2;const chestY=(shL.y+shR.y)/2+25;ctx.beginPath();ctx.moveTo(shL.x,shL.y);ctx.lineTo(chestX,chestY-10);ctx.lineTo(shR.x,shR.y);ctx.lineTo(shR.x-25*scale,shR.y+45*scale);ctx.lineTo(chestX,chestY+55*scale);ctx.lineTo(shL.x+25*scale,shL.y+45*scale);ctx.closePath();ctx.fill();ctx.stroke();if(lm[0].visibility>0.7){const headX=lm[0].x*w;const headY=lm[0].y*h;ctx.beginPath();ctx.arc(headX,headY,28*scale,0,Math.PI*2);ctx.strokeStyle='rgba(255,255,255,0.1)';ctx.stroke();ctx.strokeStyle=hudColor;ctx.strokeRect(headX-18*scale,headY-18*scale,36*scale,36*scale);}
+ctx.restore();}
+function drawArcReactor(x,y,size){overlayCtx.save();const pulse=1+Math.sin(performance.now()/180)*0.08;const outer=size*pulse;overlayCtx.beginPath();for(let i=0;i<6;i++){const angle=(Math.PI/3)*i+performance.now()/2500;overlayCtx[i===0?'moveTo':'lineTo'](x+outer*Math.cos(angle),y+outer*Math.sin(angle));}
+overlayCtx.closePath();overlayCtx.lineWidth=3;overlayCtx.strokeStyle=hudColor;overlayCtx.shadowBlur=26;overlayCtx.shadowColor=hudColor;overlayCtx.stroke();overlayCtx.fillStyle='rgba(0, 255, 255, 0.10)';overlayCtx.fill();overlayCtx.beginPath();overlayCtx.arc(x,y,outer*0.42,0,Math.PI*2);overlayCtx.fillStyle='#ffffff';overlayCtx.shadowBlur=30;overlayCtx.shadowColor=hudColor;overlayCtx.fill();overlayCtx.beginPath();overlayCtx.arc(x,y,outer*0.72,0,Math.PI*2);overlayCtx.lineWidth=1.5;overlayCtx.strokeStyle='rgba(255,255,255,0.28)';overlayCtx.stroke();overlayCtx.restore();}
+function drawThruster(x,y,size,isFlight){overlayCtx.save();if(isFlight){const grad=overlayCtx.createLinearGradient(x,y,x,y+size*5);grad.addColorStop(0,'#ffffff');grad.addColorStop(0.15,'#a5f3fc');grad.addColorStop(0.35,'#00ffff');grad.addColorStop(0.7,'#ff8c00');grad.addColorStop(1,'transparent');overlayCtx.fillStyle=grad;overlayCtx.shadowBlur=28;overlayCtx.shadowColor='#00ffff';overlayCtx.beginPath();overlayCtx.moveTo(x-size*0.9,y+size*0.2);overlayCtx.lineTo(x+size*0.9,y+size*0.2);overlayCtx.lineTo(x,y+size*5.2);overlayCtx.closePath();overlayCtx.fill();}else{overlayCtx.beginPath();overlayCtx.arc(x,y,size,0,Math.PI*2);overlayCtx.strokeStyle=hudColor;overlayCtx.lineWidth=2;overlayCtx.shadowBlur=20;overlayCtx.shadowColor=hudColor;overlayCtx.stroke();overlayCtx.beginPath();overlayCtx.arc(x,y,size*0.35,0,Math.PI*2);overlayCtx.fillStyle='rgba(0, 255, 255, 0.55)';overlayCtx.shadowBlur=18;overlayCtx.shadowColor='#ffffff';overlayCtx.fill();}
+overlayCtx.restore();}
+function drawUnibeam(x,y,h){overlayCtx.save();const width=160;const pulse=1+Math.sin(performance.now()/120)*0.05;const grad=overlayCtx.createLinearGradient(x-width/2,y,x+width/2,y);grad.addColorStop(0,'transparent');grad.addColorStop(0.18,'rgba(0, 255, 255, 0.45)');grad.addColorStop(0.4,'#ffffff');grad.addColorStop(0.6,'#ffffff');grad.addColorStop(0.82,'rgba(0, 255, 255, 0.45)');grad.addColorStop(1,'transparent');overlayCtx.fillStyle=grad;overlayCtx.shadowBlur=58;overlayCtx.shadowColor='#00ffff';overlayCtx.fillRect(x-width/2,y-50,width,h*pulse);overlayCtx.beginPath();overlayCtx.arc(x,y,24*pulse,0,Math.PI*2);overlayCtx.strokeStyle='#ffffff';overlayCtx.lineWidth=2;overlayCtx.stroke();overlayCtx.restore();}
+function drawShield(x,y,size){overlayCtx.save();const grad=overlayCtx.createRadialGradient(x,y,size*0.1,x,y,size);grad.addColorStop(0,'rgba(255, 255, 255, 0.45)');grad.addColorStop(0.55,hudColor+'88');grad.addColorStop(1,'transparent');overlayCtx.beginPath();overlayCtx.arc(x,y,size,0,Math.PI*2);overlayCtx.fillStyle=grad;overlayCtx.shadowBlur=20;overlayCtx.shadowColor=hudColor;overlayCtx.fill();overlayCtx.beginPath();overlayCtx.arc(x,y,size*0.72,0,Math.PI*2);overlayCtx.strokeStyle='rgba(255,255,255,0.25)';overlayCtx.lineWidth=1.6;overlayCtx.stroke();overlayCtx.restore();}
+function drawMissile(missile){const angle=Math.atan2(missile.vy,missile.vx);const trail=missile.trail||[];for(let i=1;i<trail.length;i++){const a=i/trail.length;overlayCtx.globalAlpha=a*0.7;overlayCtx.beginPath();overlayCtx.moveTo(trail[i-1].x,trail[i-1].y);overlayCtx.lineTo(trail[i].x,trail[i].y);overlayCtx.lineWidth=1.2+a*5.5;overlayCtx.strokeStyle=`rgba(255,255,255,${0.12+a*0.72})`;overlayCtx.shadowBlur=18;overlayCtx.shadowColor='#00ffff';overlayCtx.stroke();}
+overlayCtx.save();overlayCtx.translate(missile.x,missile.y);overlayCtx.rotate(angle+Math.PI/2);const bodyGrad=overlayCtx.createLinearGradient(0,-16,0,18);bodyGrad.addColorStop(0,'#ffffff');bodyGrad.addColorStop(0.25,'#00ffff');bodyGrad.addColorStop(1,'#0f172a');overlayCtx.beginPath();if(typeof overlayCtx.roundRect==='function'){overlayCtx.roundRect(-4,-16,8,26,4);}else{overlayCtx.rect(-4,-16,8,26);}
+overlayCtx.fillStyle=bodyGrad;overlayCtx.shadowBlur=18;overlayCtx.shadowColor='#00ffff';overlayCtx.fill();overlayCtx.beginPath();overlayCtx.moveTo(-7,6);overlayCtx.lineTo(0,22);overlayCtx.lineTo(7,6);overlayCtx.closePath();overlayCtx.fillStyle='rgba(255,140,0,0.88)';overlayCtx.shadowBlur=14;overlayCtx.shadowColor='#ff8c00';overlayCtx.fill();overlayCtx.restore();}
+const probeCanvas=document.createElement('canvas');const probeCtx=probeCanvas.getContext('2d',{willReadFrequently:true});let latestPoseLandmarks=null;let latestHandsLandmarks=[];let latestHandedness=[];let scanAnalysisTimer=null;let scanAnalysisInFlight=false;let lastLightingSample={value:128,ts:0};function clamp(value,min,max){return Math.max(min,Math.min(max,value));}
+function showScanTelemetry(visible){const panel=document.getElementById('scan-telemetry');if(!panel)return;panel.classList.toggle('visible',!!visible);}
+function updateScanTelemetry(data={}){const values={object:data.object??'WAITING',size:data.size??'--',gesture:data.gesture??'--',body:data.body??'--',distance:data.distance??'--',light:data.light??'--'};const bindings={object:'scan-object',size:'scan-size',gesture:'scan-gesture',body:'scan-body',distance:'scan-distance',light:'scan-light'};for(const[key,id]of Object.entries(bindings)){const el=document.getElementById(id);if(el)el.innerText=String(values[key]);}}
+function boundsFromLandmarks(landmarks,w,h,minVisibility=0.35){const points=(landmarks||[]).filter(p=>(p.visibility??1)>=minVisibility);if(!points.length)return null;let minX=1,minY=1,maxX=0,maxY=0;for(const p of points){minX=Math.min(minX,p.x);minY=Math.min(minY,p.y);maxX=Math.max(maxX,p.x);maxY=Math.max(maxY,p.y);}
+const padX=clamp((maxX-minX)*0.12,0.015,0.06);const padY=clamp((maxY-minY)*0.14,0.02,0.08);const x=clamp((minX-padX)*w,0,w);const y=clamp((minY-padY)*h,0,h);const width=clamp((maxX-minX+padX*2)*w,20,w-x);const height=clamp((maxY-minY+padY*2)*h,20,h-y);return{x,y,width,height};}
+function labelFromHand(hand,handednessLabel=''){const wrist=hand[0];const thumbTip=hand[4],thumbIp=hand[3];const indexTip=hand[8],indexPip=hand[6];const middleTip=hand[12],middlePip=hand[10];const ringTip=hand[16],ringPip=hand[14];const pinkyTip=hand[20],pinkyPip=hand[18];const indexExtended=indexTip.y<indexPip.y;const middleExtended=middleTip.y<middlePip.y;const ringExtended=ringTip.y<ringPip.y;const pinkyExtended=pinkyTip.y<pinkyPip.y;const thumbExtended=handednessLabel.toLowerCase().includes('right')?thumbTip.x>thumbIp.x:thumbTip.x<thumbIp.x;const extendedCount=[indexExtended,middleExtended,ringExtended,pinkyExtended].filter(Boolean).length;const curledCount=4-extendedCount;const thumbUpLike=thumbExtended&&Math.abs(thumbTip.y-wrist.y)>0.02&&thumbTip.y<wrist.y;const fistLike=curledCount>=3&&Math.hypot(indexTip.x-wrist.x,indexTip.y-wrist.y)<0.16;const openLike=extendedCount>=3&&!fistLike;const pointLike=indexExtended&&!middleExtended&&!ringExtended&&!pinkyExtended;if(thumbUpLike&&curledCount>=3)return'THUMBS UP';if(pointLike)return'POINTING';if(fistLike)return'FIST';if(openLike)return'OPEN HAND';return'UNKNOWN';}
+function estimateSizeClass(box,frameW,frameH){if(!box)return'--';const areaRatio=(box.width*box.height)/(frameW*frameH);if(areaRatio<0.035)return'SMALL';if(areaRatio<0.12)return'MEDIUM';return'LARGE';}
+function estimateDistanceMeters(box,frameW,frameH){if(!box)return'--';const heightRatio=box.height/frameH;const estimate=clamp((1.7/Math.max(heightRatio,0.04)),0.35,4.5);return`${estimate.toFixed(1)}m`;}
+function estimateBodyStatus(poseLandmarks){if(!poseLandmarks)return'NOT DETECTED';const visible=poseLandmarks.filter(p=>(p.visibility??0)>0.45).length;if(visible>=18)return'FULL BODY';if(visible>=10)return'UPPER BODY';if(visible>=5)return'PARTIAL';return'LOW CONFIDENCE';}
+function sampleLightingLevel(){try{if(!video.videoWidth||!video.videoHeight)return lastLightingSample.value;const now=performance.now();if(now-lastLightingSample.ts<650)return lastLightingSample.value;const w=48,h=27;probeCanvas.width=w;probeCanvas.height=h;probeCtx.drawImage(video,0,0,w,h);const data=probeCtx.getImageData(0,0,w,h).data;let sum=0;for(let i=0;i<data.length;i+=4){sum+=0.2126*data[i]+0.7152*data[i+1]+0.0722*data[i+2];}
+const avg=sum/(w*h);lastLightingSample={value:avg,ts:now};return avg;}catch(e){return lastLightingSample.value;}}
+function lightingLabel(v){if(v<42)return'VERY LOW';if(v<72)return'LOW';if(v<120)return'NORMAL';if(v<180)return'BRIGHT';return'HOT';}
+function applyAdaptiveCameraLook(){const light=sampleLightingLevel();const lowLight=light<72;if(scanModeActive){canvas.style.filter=lowLight?'contrast(1.58) brightness(1.14) saturate(1.12)':'contrast(1.12) brightness(1.03) saturate(1.06)';}else{canvas.style.filter=lowLight?'contrast(1.52) brightness(0.88) saturate(1.05)':'contrast(1.4) brightness(0.75) saturate(1.0)';}}
+function drawScanBox(box,label,color='#00ffff'){if(!box)return;const el=document.createElement('div');el.className='scan-box';el.style.left=`${box.x}px`;el.style.top=`${box.y}px`;el.style.width=`${box.width}px`;el.style.height=`${box.height}px`;el.style.borderColor=color;el.style.boxShadow=`0 0 18px ${color}22`;const tag=document.createElement('div');tag.className='scan-label';tag.style.borderColor=color+'55';tag.textContent=label;el.appendChild(tag);overlayCanvas.parentElement?.appendChild(el);setTimeout(()=>el.remove(),45);}
+function clearTransientScanBoxes(){const boxes=document.querySelectorAll('.scan-box');boxes.forEach((box)=>box.remove());}
+function drawPoseSkeletonAndBody(lm,w,h){if(!lm)return;const conn=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];overlayCtx.save();overlayCtx.strokeStyle='rgba(0, 255, 255, 0.8)';overlayCtx.lineWidth=2;overlayCtx.shadowBlur=14;overlayCtx.shadowColor='#00ffff';for(const[a,b]of conn){const pa=lm[a],pb=lm[b];if(!pa||!pb)continue;if((pa.visibility??0)<0.35||(pb.visibility??0)<0.35)continue;overlayCtx.beginPath();overlayCtx.moveTo(pa.x*w,pa.y*h);overlayCtx.lineTo(pb.x*w,pb.y*h);overlayCtx.stroke();}
+const box=boundsFromLandmarks(lm,w,h,0.35);if(box){overlayCtx.strokeStyle='rgba(0,255,255,0.9)';overlayCtx.lineWidth=1.8;overlayCtx.shadowBlur=16;overlayCtx.shadowColor='#00ffff';overlayCtx.strokeRect(box.x,box.y,box.width,box.height);overlayCtx.fillStyle='rgba(0,0,0,0.7)';overlayCtx.fillRect(box.x,Math.max(0,box.y-22),116,18);overlayCtx.fillStyle='#ffffff';overlayCtx.font='10px Courier New, monospace';overlayCtx.fillText('BODY LOCK',box.x+6,Math.max(11,box.y-9));}
+overlayCtx.restore();return box;}
+function drawHandOverlay(hand,handednessLabel,index,frameW,frameH){const box=boundsFromLandmarks(hand,frameW,frameH,0.15);if(!box)return null;const gesture=labelFromHand(hand,handednessLabel);const color=gesture==='FIST'?'#f97316':gesture==='THUMBS UP'?'#22c55e':gesture==='POINTING'?'#a855f7':'#00ffff';overlayCtx.save();overlayCtx.strokeStyle=color;overlayCtx.lineWidth=2;overlayCtx.shadowBlur=16;overlayCtx.shadowColor=color;overlayCtx.strokeRect(box.x,box.y,box.width,box.height);overlayCtx.fillStyle='rgba(0,0,0,0.75)';overlayCtx.fillRect(box.x,Math.max(0,box.y-22),Math.min(180,box.width+40),18);overlayCtx.fillStyle='#ffffff';overlayCtx.font='10px Courier New, monospace';overlayCtx.fillText(`${handednessLabel||'HAND'}• ${gesture}`,box.x+6,Math.max(11,box.y-9));overlayCtx.restore();return{box,gesture,color};}
+async function analyzeTrackSnapshot(){if(!scanModeActive||scanAnalysisInFlight)return;scanAnalysisInFlight=true;try{const imageBase64=getVideoFrameBase64();if(!imageBase64)return;const prompt=`You are F.R.I.D.A.Y.running a live track scan in a futuristic HUD.Return ONLY valid JSON with these keys:{"object":"short noun phrase","size":"SMALL | MEDIUM | LARGE","gesture":"OPEN HAND | FIST | POINTING | THUMBS UP | UNKNOWN","body":"FULL BODY | UPPER BODY | PARTIAL | NOT DETECTED","distance":"short estimate in meters like 1.4m","confidence":0-100,"notes":"one short sentence"}
+Rules:-Focus on the most prominent visible subject in the frame.-If the visible subject is a person,describe body and gesture.-If the visible subject is an object,describe the object and its approximate size.-Be honest when unclear.-Do not add markdown,code fences,or extra commentary.Frame request:${scanModeActive?'TRACK SCAN':'NORMAL'}`;const res=await fetch(GEMINI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':GEMINI_API_KEY},body:JSON.stringify({contents:[{parts:[{text:prompt},{inline_data:{mime_type:'image/jpeg',data:imageBase64}}]}],generationConfig:{temperature:0.1,topP:0.9,maxOutputTokens:220,thinkingConfig:{thinkingLevel:"low"}}})});const data=await res.json();const raw=data?.candidates?.[0]?.content?.parts?.map(p=>p.text||'').join(' ').trim();if(!raw)return;const cleaned=raw.replace(/```json|```/g,'').trim();const match=cleaned.match(/\{[\s\S]*\}/);const jsonText=match?match[0]:cleaned;let parsed=null;try{parsed=JSON.parse(jsonText);}catch(e){parsed=null;}
+if(parsed){updateScanTelemetry({object:parsed.object||'UNKNOWN',size:parsed.size||'--',gesture:parsed.gesture||'--',body:parsed.body||'--',distance:parsed.distance||'--',light:lightingLabel(lastLightingSample.value)});if(typeof parsed.confidence!=='undefined'){document.getElementById('sync-status').innerText=`}
+if(parsed.notes)addLog(`SCAN:${parsed.notes}`);}}catch(e){}finally{scanAnalysisInFlight=false;}}
+function startTrackAnalysisLoop(){if(scanAnalysisTimer)return;scanAnalysisTimer=setInterval(()=>{if(scanModeActive)analyzeTrackSnapshot();},2800);}
+function stopTrackAnalysisLoop(){if(scanAnalysisTimer){clearInterval(scanAnalysisTimer);scanAnalysisTimer=null;}
+scanAnalysisInFlight=false;}
+function onResults(results){latestPoseLandmarks=results.poseLandmarks||null;ctx.drawImage(results.image,0,0,canvas.width,canvas.height);const scanOverlayAlpha=scanModeActive?0.08:0.24;ctx.fillStyle=`rgba(1,6,12,${scanOverlayAlpha})`;ctx.fillRect(0,0,canvas.width,canvas.height);overlayCtx.clearRect(0,0,overlayCanvas.width,overlayCanvas.height);clearTransientScanBoxes();applyAdaptiveCameraLook();const w=overlayCanvas.width,h=overlayCanvas.height;if(scanModeActive){document.getElementById('sync-status').innerText="// TRACK SCAN ACTIVE // LIVE CAMERA MODE";const light=sampleLightingLevel();updateScanTelemetry({object:document.getElementById('scan-object')?.innerText||'ANALYZING',size:document.getElementById('scan-size')?.innerText||'--',gesture:document.getElementById('scan-gesture')?.innerText||'--',body:latestPoseLandmarks?estimateBodyStatus(latestPoseLandmarks):'NOT DETECTED',distance:latestPoseLandmarks?estimateDistanceMeters(boundsFromLandmarks(latestPoseLandmarks,w,h,0.35),w,h):'--',light:lightingLabel(light)});overlayCtx.save();overlayCtx.strokeStyle='rgba(0,255,255,0.25)';overlayCtx.lineWidth=1.2;overlayCtx.setLineDash([10,12]);overlayCtx.beginPath();overlayCtx.moveTo(w*0.08,h*0.5);overlayCtx.lineTo(w*0.92,h*0.5);overlayCtx.stroke();overlayCtx.setLineDash([]);overlayCtx.beginPath();overlayCtx.strokeStyle='rgba(0,255,255,0.55)';overlayCtx.arc(w*0.5,h*0.5,Math.min(w,h)*0.18,0,Math.PI*2);overlayCtx.stroke();overlayCtx.restore();if(latestPoseLandmarks){const bodyBox=drawPoseSkeletonAndBody(latestPoseLandmarks,w,h);if(bodyBox){const sizeClass=estimateSizeClass(bodyBox,w,h);const distClass=estimateDistanceMeters(bodyBox,w,h);updateScanTelemetry({object:'BODY / PERSON',size:sizeClass,body:estimateBodyStatus(latestPoseLandmarks),distance:distClass,light:lightingLabel(light)});}}
+if(latestHandsLandmarks&&latestHandsLandmarks.length){latestHandsLandmarks.forEach((hand,idx)=>{const handednessLabel=latestHandedness?.[idx]?.label||`HAND ${idx+1}`;const result=drawHandOverlay(hand,handednessLabel,idx,w,h);if(result){updateScanTelemetry({gesture:result.gesture,size:estimateSizeClass(result.box,w,h),light:lightingLabel(light)});}});}
+renderVisualEffects();return;}
+if(results.poseLandmarks){const lm=results.poseLandmarks;if(!isSuitedUp&&!isDetecting){isDetecting=true;document.getElementById('sync-status').innerText="// RETINAL SECURITY CONFIRMED. INITIALIZING CORE...";setTimeout(triggerSuitUp,1200);}
+if(isSuitedUp){const lShoulder=lm[11],rShoulder=lm[12];const lElbow=lm[13],rElbow=lm[14];const lWrist=lm[15],rWrist=lm[16];const chestX=((lShoulder.x+rShoulder.x)/2)*w;const chestY=((lShoulder.y+rShoulder.y)/2)*h+30;const scale=Math.max(0.4,Math.abs(lShoulder.x-rShoulder.x)*2);drawArmorPlates(overlayCtx,lm,w,h,scale);drawArcReactor(chestX,chestY,26*scale);const wristDist=Math.hypot(lWrist.x-rWrist.x,lWrist.y-rWrist.y);const shieldActive=(wristDist<0.08&&lWrist.y>lShoulder.y);const isUnibeamPose=(wristDist<0.1&&Math.abs(lWrist.y-chestY/h)<0.15&&Math.abs(rWrist.y-chestY/h)<0.15);if(isUnibeamPose){drawUnibeam(chestX,chestY,h);document.body.classList.add('heavy-shake');drainPower(1.0);if(!unibeamCharging){fridaySpeak("Unibeam discharging. Clear the path!",true);playFX('unibeam');spawnParticles(chestX,chestY,18,['#ffffff','#00ffff']);spawnRipple(chestX,chestY,'#ffffff');}
+unibeamCharging=true;}else{unibeamCharging=false;document.body.classList.remove('heavy-shake');if(shieldActive){drawShield(chestX,chestY,240*scale);if(!lastShieldState){fridaySpeak("Hardlight shielding protocol active.",true);addLog("Shield optimized.");}
+drainPower(0.25);}}
+lastShieldState=shieldActive;const lFire=lWrist.y<lElbow.y-0.05;const rFire=rWrist.y<rElbow.y-0.05;const isFlyingPose=Math.abs(lWrist.y-lShoulder.y)<0.1&&Math.abs(rWrist.y-rShoulder.y)<0.1&&!lFire&&!rFire&&!isUnibeamPose;const flightPanel=document.getElementById('flight-panel');if(isFlyingPose){flightPanel.classList.remove('hidden');drainPower(0.15);if(lWrist.visibility>0.5)drawThruster(lWrist.x*w,lWrist.y*h,18*scale,true);if(rWrist.visibility>0.5)drawThruster(rWrist.x*w,rWrist.y*h,18*scale,true);if(!lastFlightState){fridaySpeak("Vector boosters are active. Stabilizing altitude.",true);spawnParticles(lWrist.x*w,lWrist.y*h,8,['#00ffff','#ffffff']);spawnParticles(rWrist.x*w,rWrist.y*h,8,['#00ffff','#ffffff']);}}else{flightPanel.classList.add('hidden');if(lWrist.visibility>0.5&&!isUnibeamPose)drawThruster(lWrist.x*w,lWrist.y*h,18*scale,false);if(rWrist.visibility>0.5&&!isUnibeamPose)drawThruster(rWrist.x*w,rWrist.y*h,18*scale,false);}
+lastFlightState=isFlyingPose;if((lFire||rFire)&&!isUnibeamPose&&!isFlyingPose){document.body.classList.add('shake');drainPower(0.35);if(!lastRepulsorState){fridaySpeak("Repulsor matrix is discharging.",true);}
+if(Math.random()>0.72)playFX('repulsor');const rx=(lFire?lWrist.x:rWrist.x)*w;const ry=(lFire?lWrist.y:rWrist.y)*h;spawnParticles(rx,ry,8,['#ffffff','#00ffff']);spawnRipple(rx,ry,'#ffffff');if(lFire){overlayCtx.beginPath();overlayCtx.arc(lWrist.x*w,lWrist.y*h,25*scale,0,Math.PI*2);overlayCtx.fillStyle='#fff';overlayCtx.shadowBlur=20;overlayCtx.shadowColor='#ffffff';overlayCtx.fill();}
+if(rFire){overlayCtx.beginPath();overlayCtx.arc(rWrist.x*w,rWrist.y*h,25*scale,0,Math.PI*2);overlayCtx.fillStyle='#fff';overlayCtx.shadowBlur=20;overlayCtx.shadowColor='#ffffff';overlayCtx.fill();}}else if(!isUnibeamPose){document.body.classList.remove('shake');}
+lastRepulsorState=(lFire||rFire);const leftForearmAim=Math.hypot(lWrist.x-lElbow.x,lWrist.y-lElbow.y)<0.18||lWrist.y<lElbow.y+0.06;const rightForearmAim=Math.hypot(rWrist.x-rElbow.x,rWrist.y-rElbow.y)<0.18||rWrist.y<rElbow.y+0.06;const leftLaunchReady=lWrist.visibility>0.5&&lElbow.visibility>0.5&&leftForearmAim&&lWrist.x<lElbow.x+0.22;const rightLaunchReady=rWrist.visibility>0.5&&rElbow.visibility>0.5&&rightForearmAim&&rWrist.x>rElbow.x-0.22;if((leftLaunchReady||rightLaunchReady)&&missiles>0&&Math.random()>0.92){const side=leftLaunchReady?'left':'right';const origin=side==='left'?{x:((lElbow.x*0.45+lWrist.x*0.55))*w-10,y:((lElbow.y*0.35+lWrist.y*0.65))*h}:{x:((rElbow.x*0.45+rWrist.x*0.55))*w+10,y:((rElbow.y*0.35+rWrist.y*0.65))*h};launchMissile(side,origin);missiles--;syncMissileUI();triggerFxLabel('MISSILE FIRED','#00ffff');spawnParticles(origin.x,origin.y,12,['#ffffff','#00ffff','#60a5fa']);spawnRipple(origin.x,origin.y,'#00ffff');if(missiles===0){setWeaponStatus("ORDNANCE DEPLETED",true);fridaySpeak("Warning! Micro missile inventory is depleted.",true);}}}}else if(isSuitedUp){isSuitedUp=false;isDetecting=false;document.getElementById('status-container').style.opacity='1';document.getElementById('sync-status').innerText="// SYSTEM DISCONNECTED // AWAITING NEURAL SYNAPSE";document.getElementById('center-reticle').style.display='none';document.getElementById('main-hud').classList.remove('hud-visible');document.body.classList.remove('shake','heavy-shake');setScanLocked(false);if(recognition)recognition.stop();fridaySpeak("Target lost. I am putting the suit on standby network.",true);}
+for(let i=activeMissiles.length-1;i>=0;i--){const m=activeMissiles[i];m.trail=m.trail||[];m.trail.push({x:m.x,y:m.y});if(m.trail.length>14)m.trail.shift();m.x+=m.vx;m.y+=m.vy;m.vx*=1.004;m.vy-=0.03;m.life-=1;drawMissile(m);if(m.y<-40||m.x<-60||m.x>overlayCanvas.width+60||m.life<=0){spawnRipple(m.x,m.y,'#00ffff');spawnParticles(m.x,m.y,10,['#00ffff','#ffffff','#f59e0b']);activeMissiles.splice(i,1);}}
+renderVisualEffects();}
+function drainPower(amount){powerCore=Math.max(0,powerCore-amount);document.getElementById('power-val').innerText=Math.floor(powerCore);if(powerCore<=15&&powerCore>14.6){fridaySpeak("Warning, Boss! Arc reactor power is critically low. Charge the core.",true);}}
+const pose=new Pose({locateFile:(file)=>`https:pose.setOptions({modelComplexity:2,smoothLandmarks:true,enableSegmentation:false,smoothSegmentation:false,minDetectionConfidence:0.48,minTrackingConfidence:0.46});pose.onResults(onResults);const hands=new Hands({locateFile:(file)=>`https:hands.setOptions({maxNumHands:2,modelComplexity:1,minDetectionConfidence:0.5,minTrackingConfidence:0.45});hands.onResults((results)=>{latestHandsLandmarks=results.multiHandLandmarks||[];latestHandedness=results.multiHandedness||[];});const camera=new Camera(video,{onFrame:async()=>{await pose.send({image:video});if(isSuitedUp||scanModeActive){await hands.send({image:video});}},width:1280,height:720});camera.start();setInterval(()=>{if(video.readyState>=2)sampleLightingLevel();},900);initVoiceRecognition();const trackScanBtn=document.getElementById('track-scan-btn');if(trackScanBtn){trackScanBtn.addEventListener('click',()=>{if(!isSuitedUp){fridaySpeak("Suit is not active yet. Lock the neural link first.",true);return;}
+runTrackScan();});}
+document.addEventListener('pointerdown',()=>{if(armedOnce)return;armedOnce=true;if(audioCtx.state==='suspended')audioCtx.resume();startRecognitionSafe(120);});setInterval(()=>{if(isSuitedUp&&!lastRepulsorState&&!lastShieldState&&!unibeamCharging&&!lastFlightState){if(powerCore<100){powerCore=Math.min(100,powerCore+0.45);document.getElementById('power-val').innerText=Math.floor(powerCore);}}},1200);setInterval(()=>{if(isSuitedUp&&!isFridaySpeaking&&Math.random()>0.65){const recommendations=["Boss, try the vector boosters. Keep both arms steady.","Sir, the health scan is available. Say \"run health scan\".","Ordnance stack is stable, Boss. Cross your hands to fire the Unibeam.","Stealth mode is on standby, Sir. What should I activate?","I can analyze any object you show me. Say \"analyze this\"."];const rec=recommendations[Math.floor(Math.random()*recommendations.length)];fridaySpeak(rec);}},18000);</script>
 </body>
 </html>
